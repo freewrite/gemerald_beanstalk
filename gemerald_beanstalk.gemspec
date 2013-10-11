@@ -18,6 +18,9 @@ Gem::Specification.new do |spec|
   spec.test_files    = spec.files.grep(%r{^test/})
   spec.require_paths = ['lib']
 
+  spec.add_dependency 'activesupport'
+  spec.add_dependency 'eventmachine'
+  spec.add_dependency 'state_machine'
   spec.add_development_dependency 'bundler', '~> 1.3'
   spec.add_development_dependency 'rake'
 end
