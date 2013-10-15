@@ -25,12 +25,16 @@ module GemeraldBeanstalk::Server
     @connection.close_connection
   end
 
-  def self.start(bind_address = '127.0.0.1', port = 11300)
-    Thread.new do
+  def self.start(bind_address = nil, port = nil)
+    bind_address ||= '0.0.0.0'
+    port ||= 11300
+    beanstalk = GemeraldBeanstalk::Beanstalk.new("#{bind_address}:#{port}")
+    thread = Thread.new do
       EventMachine.run do
-        EventMachine.start_server(bind_address, port, GemeraldBeanstalk::Server, GemeraldBeanstalk::Beanstalk.new("#{bind_address}:#{port}"))
+        EventMachine.start_server(bind_address, port, GemeraldBeanstalk::Server, beanstalk)
       end
     end
+    return [thread, beanstalk]
   end
 
 end
