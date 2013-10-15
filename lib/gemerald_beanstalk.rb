@@ -9,5 +9,3 @@ require 'gemerald_beanstalk/tubes'
 require 'gemerald_beanstalk/server'
 
 module GemeraldBeanstalk; end
-
-@x = GemeraldBeanstalk::Server.start
