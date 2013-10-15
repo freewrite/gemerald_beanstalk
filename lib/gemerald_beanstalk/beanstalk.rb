@@ -234,8 +234,9 @@ class GemeraldBeanstalk::Beanstalk
 
 
   def put(connection, priority, delay, ttr, bytes, body)
-    return "JOB_TOO_BIG\r\n" if bytes.to_i > @max_job_size
-    return "EXPECTED_CRLF\r\n" if body.length - 2 != bytes.to_i || (body = body.gsub!(/\r\n$/, '')).nil?
+    bytes = bytes.to_i
+    return "JOB_TOO_BIG\r\n" if bytes > @max_job_size
+    return "EXPECTED_CRLF\r\n" if body.length - 2 != bytes || body.slice!(-2, 2) != "\r\n"
 
     id = nil
     @mutex.synchronize do
