@@ -49,7 +49,7 @@ class GemeraldBeanstalk::Job
     end
 
 
-    event :timeout do
+    event :timed_out do
       transition :reserved => :ready
     end
 
@@ -199,7 +199,7 @@ class GemeraldBeanstalk::Job
   end
 
 
-  def timeout(*args)
+  def timed_out(*args)
     self.beanstalk.register_job_timeout
     self.state = :ready
     reset_reserve_state
@@ -221,7 +221,7 @@ class GemeraldBeanstalk::Job
     elsif @state == 'reserved'
       now = Time.now.to_f
       if self.timeout_at <= now
-        timeout
+        timed_out
       elsif self.timeout_at <= now + 1
         self.reserved_by.set_deadline(self.timeout_at)
       end
