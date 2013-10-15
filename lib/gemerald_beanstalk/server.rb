@@ -1,5 +1,4 @@
 require 'eventmachine'
-require 'debugger'
 
 module GemeraldBeanstalk::Server
 

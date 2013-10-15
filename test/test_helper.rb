@@ -8,7 +8,7 @@ $LOAD_PATH.unshift(lib) unless $LOAD_PATH.include?(lib)
 require 'minitest/autorun'
 require 'test/unit'
 require 'mocha/setup'
-require 'debugger'
+require 'debugger' rescue nil
 require 'timeout'
 require 'json'
 require 'beaneater'

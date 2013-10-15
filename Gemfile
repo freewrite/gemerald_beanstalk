@@ -5,6 +5,6 @@ gemspec
 group :test do
   gem 'beaneater'
   gem 'coveralls', :require => false
-  gem 'debugger'
+  gem 'debugger', :platform => [:mri_19, :mri_20]
   gem 'mocha', :require => false
 end
