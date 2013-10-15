@@ -116,6 +116,7 @@ class GemeraldBeanstalk::Beanstalk
 
     @mutex.synchronize do
       tube(job.tube_name).delete(job)
+      @jobs[job.id - 1] = nil
     end
 
     return "DELETED\r\n"

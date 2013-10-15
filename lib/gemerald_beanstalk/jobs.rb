@@ -3,9 +3,8 @@ class GemeraldBeanstalk::Jobs < Array
 
   def counts_by_state
     job_stats = Hash.new(0)
-    self.each do |job|
+    self.compact.each do |job|
       state = job.state_name
-      next if state == :deleted
 
       job_stats["current-jobs-#{state}"] += 1
       job_stats['current-jobs-urgent'] += 1 if state == :ready && job.priority < 1024
