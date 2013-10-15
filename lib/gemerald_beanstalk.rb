@@ -6,5 +6,3 @@ require 'gemerald_beanstalk/jobs'
 require 'gemerald_beanstalk/tube'
 require 'gemerald_beanstalk/tubes'
 require 'gemerald_beanstalk/server'
-
-module GemeraldBeanstalk; end
