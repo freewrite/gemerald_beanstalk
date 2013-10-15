@@ -8,6 +8,7 @@ module GemeraldBeanstalk::Server
   end
 
   def initialize(beanstalk)
+    @send_data_callback = proc {|response| send_data(response) }
     @beanstalk = beanstalk
     super
   end
@@ -17,11 +18,7 @@ module GemeraldBeanstalk::Server
   end
 
   def receive_data(data)
-    result = nil
-    Thread.new do
-      result = send_data(@connection.execute(data))
-    end
-    return result
+    EventMachine.defer(proc { @connection.execute(data) }, @send_data_callback)
   end
 
   def unbind
