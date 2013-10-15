@@ -1,4 +1,3 @@
-require 'active_support/core_ext/string/inflections'
 require 'gemerald_beanstalk/version'
 require 'gemerald_beanstalk/beanstalk'
 require 'gemerald_beanstalk/connection'

@@ -2,6 +2,7 @@ require 'state_machine'
 
 class GemeraldBeanstalk::Job
   STATS_COMMANDS = [:bury, :kick, :release, :reserve]
+  STATS_KEYS = {:bury => 'buries', :kick => 'kicks', :release => 'releases', :reserve => 'reserves'}
   UPDATE_STATES = %w[delayed reserved]
   attr_reader :beanstalk, :reserved_at, :reserved_by, :timeout_at
   attr_accessor :priority, :tube_name, :delay, :ready_at, :body,
@@ -54,7 +55,7 @@ class GemeraldBeanstalk::Job
 
     around_transition do |job, transition, block|
       if STATS_COMMANDS.include?(transition.event)
-        job.stats_hash[transition.event.to_s.pluralize] += 1
+        job.stats_hash[STATS_KEYS[transition.event]] += 1
       end
       block.call
     end

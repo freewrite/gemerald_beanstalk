@@ -1,11 +1,16 @@
+require 'securerandom'
 require 'set'
 require 'socket'
-require 'securerandom'
 
 class GemeraldBeanstalk::Beanstalk
   COMMANDS = %w[bury delete ignore kick kick-job list-tubes list-tube-used
     list-tubes-watched pause-tube peek peek-buried peek-delayed peek-ready put quit release
     reserve reserve-with-timeout stats stats-job stats-tube touch use watch]
+
+  COMMAND_METHOD_NAMES = Hash[COMMANDS.zip(COMMANDS)].merge!({'kick-job' => :kick_job, 'list-tubes' => :list_tubes, 'list-tube-used' => :list_tube_used,
+    'list-tubes-watched' => :list_tubes_watched, 'pause-tube' => :pause_tube, 'peek-buried' => :peek_buried,
+    'peek-delayed' => :peek_delayed, 'peek-ready' => :peek_ready, 'reserve-with-timeout' => :reserve_with_timeout,
+    'stats-job' => :stats_job, 'stats-tube' => :stats_tube})
 
   CONNECTION_SPECIFIC_COMMANDS = %w[bury delete ignore kick list-tube-used list-tubes-watched
     peek-buried peek-delayed peek-ready put quit release reserve reserve-with-timeout touch use watch]
@@ -40,11 +45,10 @@ class GemeraldBeanstalk::Beanstalk
     adjust_stats_key("cmd-#{command}") if STATS_COMMANDS.include?(command)
 
     command_params.unshift(connection) if connection_specific_command?(command)
-    command_method = command.underscore
 
-    return bad_format! unless self.method(command_method).parameters.length == command_params.length
+    return bad_format! unless COMMAND_METHOD_PARAMETER_COUNTS[command] == command_params.length
 
-    return send(command_method, *command_params)
+    return send(COMMAND_METHOD_NAMES[command], *command_params)
   end
 
 
@@ -448,5 +452,7 @@ class GemeraldBeanstalk::Beanstalk
     response = %w[---].concat(data).join("\n")
     return "OK #{response.bytesize}\r\n#{response}\r\n"
   end
+
+  COMMAND_METHOD_PARAMETER_COUNTS = Hash[COMMANDS.map {|command| [command, instance_method(COMMAND_METHOD_NAMES[command]).parameters.length] }]
 
 end
