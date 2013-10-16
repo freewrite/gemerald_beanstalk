@@ -72,7 +72,9 @@ class GemeraldBeanstalk::Beanstalk
     adjust_stats_key('job-timeouts')
   end
 
+
   protected
+
 
   def active_tubes
     return @tubes.select { |tube_name, tube| tube.active? }
@@ -117,6 +119,7 @@ class GemeraldBeanstalk::Beanstalk
     @mutex.synchronize do
       tube(job.tube_name).delete(job)
       @jobs[job.id - 1] = nil
+      @reserved[connection].delete(job) if job.state_name == :reserved
     end
 
     return "DELETED\r\n"
