@@ -2,6 +2,7 @@ require 'set'
 
 class GemeraldBeanstalk::Connection
 
+  REQUEST_BODY_PENDING = :request_body_pending
   COMMAND_PARSER_REGEX = /(?<command>.*?)(?:\r\n(?<body>.*))?\r\n\z/m
   attr_reader :beanstalk, :tube_used, :tubes_watched
   attr_writer :producer, :waiting, :worker
@@ -31,17 +32,17 @@ class GemeraldBeanstalk::Connection
 
 
   def execute(raw_command)
-    if @multi_part_header.nil?
+    if @multi_part_request.nil?
       parsed_command = parse_command(raw_command)
       return if parsed_command.nil?
-      if parsed_command[0] == 'put' && parsed_command.last.nil?
-        @multi_part_header = parsed_command
+      if parsed_command[0] == 'put' && parsed_command[-1] == REQUEST_BODY_PENDING
+        @multi_part_request = parsed_command
         return
       end
     else
-      @multi_part_header[-1] = raw_command
-      parsed_command = @multi_part_header
-      @multi_part_header = nil
+      @multi_part_request[-1] = raw_command
+      parsed_command = @multi_part_request
+      @multi_part_request = nil
     end
     #puts parsed_command.inspect
     response = beanstalk.execute(self, *parsed_command)
@@ -67,8 +68,11 @@ class GemeraldBeanstalk::Connection
     command_lines = raw_command.match(COMMAND_PARSER_REGEX)
     return nil if command_lines.nil?
     command_params = command_lines[:command].split(/\s/)
-    command_params.push(nil) if command_lines[:command][-1] =~ /\s/
-    command_params.push("#{command_lines[:body]}\r\n") if command_params[0] == 'put' && !command_lines[:body].nil?
+    if command_lines[:command][-1] =~ /\s/
+      command_params.push(GemeraldBeanstalk::Beanstalk::TRAILING_WHITESPACE)
+    elsif command_params[0] == 'put'
+      command_params.push(command_lines[:body].nil? ? REQUEST_BODY_PENDING : "#{command_lines[:body]}\r\n")
+    end
     return command_params
   end
 

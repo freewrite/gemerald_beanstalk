@@ -18,6 +18,8 @@ class GemeraldBeanstalk::Beanstalk
   STATS_COMMANDS = %w[bury delete ignore kick list-tube-used list-tubes list-tubes-watched pause-tube peek
     peek-buried peek-delayed peek-ready put release reserve stats stats-job stats-tube use watch]
 
+  TRAILING_WHITESPACE = :trailing_whitespace
+
   attr_reader :address, :tubes, :connections
 
   def connect(tcp_connection = nil)
@@ -46,7 +48,7 @@ class GemeraldBeanstalk::Beanstalk
 
     command_params.unshift(connection) if connection_specific_command?(command)
 
-    return bad_format! unless COMMAND_METHOD_PARAMETER_COUNTS[command] == command_params.length
+    return bad_format! if COMMAND_METHOD_PARAMETER_COUNTS[command] != command_params.length || command_params[-1] == TRAILING_WHITESPACE
 
     return send(COMMAND_METHOD_NAMES[command], *command_params)
   end
