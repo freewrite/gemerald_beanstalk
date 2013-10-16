@@ -6,9 +6,18 @@ class GemeraldBeanstalk::Connection
   attr_reader :beanstalk, :tube_used, :tubes_watched
   attr_writer :producer, :waiting, :worker
 
+  def alive?
+    return !closed?
+  end
 
   def close_connection
     (@connection.close_connection rescue nil) unless @connection.nil?
+    @closed = true
+  end
+
+
+  def closed?
+    return @closed || false
   end
 
 

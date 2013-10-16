@@ -286,7 +286,7 @@ class GemeraldBeanstalk::Beanstalk
     timeout_at = Time.now.to_f + timeout unless [nil, 0].include?(timeout)
     connection.worker = true unless connection.worker?
     connection.waiting = true
-    while [nil, 0].include?(timeout) || Time.now.to_f < timeout_at
+    while ([nil, 0].include?(timeout) || Time.now.to_f < timeout_at) && connection.alive?
       @reserved[connection].each(&:state)
       return deadline_soon! if connection.deadline_pending?
 
