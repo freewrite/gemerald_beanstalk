@@ -3,15 +3,6 @@ class GemeraldBeanstalk::Tube
   attr_reader :jobs, :name, :reservartions
 
   state_machine :state, :initial => :ready do
-    state :paused do
-    end
-
-    state :ready do
-    end
-
-    state :deactivated do
-    end
-
     event :pause do
       transition :ready => :paused
     end

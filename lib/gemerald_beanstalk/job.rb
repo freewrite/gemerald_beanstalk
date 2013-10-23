@@ -9,30 +9,6 @@ class GemeraldBeanstalk::Job
     :bytes, :created_at, :ttr, :id, :stats_hash, :buried_at
 
   state_machine :state, :initial => :readied do
-    state :buried do
-    end
-
-
-    state :reserved do
-    end
-
-
-    state :deleted do
-    end
-
-
-    state :ready do
-    end
-
-
-    state :delayed do
-    end
-
-
-    state :deadline_pending do
-    end
-
-
     event :bury do
       transition [:reserved, :deadline_pending] => :buried
     end

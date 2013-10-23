@@ -9,23 +9,6 @@ class GemeraldBeanstalk::Connection
   attr_writer :producer, :waiting, :worker
 
   state_machine :inbound_state, :initial => :ready, :namespace => :inbound do
-
-    state :ready do
-    end
-
-
-    state :waiting do
-    end
-
-
-    state :timed_out do
-    end
-
-
-    state :closed do
-    end
-
-
     event :response_received do
       transition :waiting => :ready
     end
@@ -49,19 +32,6 @@ class GemeraldBeanstalk::Connection
   end
 
   state_machine :outbound_state, :initial => :ready, :namespace => :outbound do
-
-    state :ready do
-    end
-
-
-    state :multi_part_request_pending do
-    end
-
-
-    state :closed do
-    end
-
-
     event :multi_part_request_start do
       transition :ready => :multi_part_request_pending
     end
