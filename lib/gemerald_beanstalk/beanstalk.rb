@@ -69,6 +69,7 @@ class GemeraldBeanstalk::Beanstalk
     @max_job_size = max_job_size
     @address = address
     @connections = []
+    @delayed = []
     @id = SecureRandom.base64(16)
     @jobs = GemeraldBeanstalk::Jobs.new
     @mutex = Mutex.new
@@ -88,7 +89,7 @@ class GemeraldBeanstalk::Beanstalk
   end
 
 
-  def update_waiting_connections
+  def update_state
     waiting_connections.each do |connection|
       if connection.waiting?
         if deadline_pending?(connection)
@@ -103,6 +104,14 @@ class GemeraldBeanstalk::Beanstalk
       end
     end
     @reserved.values.flatten.each(&:update_state)
+    @delayed.keep_if do |job|
+      if job.delayed?
+        true
+      else
+        honor_reservations(job)
+        false
+      end
+    end
   end
 
   protected
@@ -177,7 +186,8 @@ class GemeraldBeanstalk::Beanstalk
   end
 
 
-  def honor_reservations(job, tube)
+  def honor_reservations(job, tube = nil)
+    tube ||= tube(job.tube_name)
     while !(next_reservation = tube.next_reservation).nil?
       break if try_dispatch(job, next_reservation)
     end
@@ -297,7 +307,12 @@ class GemeraldBeanstalk::Beanstalk
     # Send async so client doesn't wait while we check if job can be immediately dispatched
     connection.transmit("INSERTED #{id}\r\n")
 
-    honor_reservations(job, tube)
+    if job.ready?
+      honor_reservations(job, tube)
+    elsif job.delayed?
+      @delayed << job
+    end
+    return nil
   end
 
 
@@ -317,6 +332,7 @@ class GemeraldBeanstalk::Beanstalk
     return BAD_FORMAT unless success
 
     @reserved[connection].delete(job)
+    @delayed << job if job.delayed?
     return "RELEASED\r\n"
   end
 

@@ -163,7 +163,7 @@ class GemeraldBeanstalk::Job
     return false unless reserved_by_connection?(connection)
 
     reset_reserve_state
-    self.state = delay > 0 ? :delayed : :ready
+    self.state = delay > 0 ? 'delayed' : 'ready'
     self.stats_hash['releases'] += 1 if increment_stats
     self.priority = priority.to_i
     self.delay = delay = delay.to_i

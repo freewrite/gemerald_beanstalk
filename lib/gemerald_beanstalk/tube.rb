@@ -42,6 +42,7 @@ class GemeraldBeanstalk::Tube
     return @reservations.delete(connection)
   end
 
+
   def delete(job)
     adjust_stats_key('cmd-delete')
     return @jobs.delete(job)

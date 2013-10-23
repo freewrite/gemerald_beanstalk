@@ -9,7 +9,7 @@ module GemeraldBeanstalk::Server
     thread = Thread.new do
       EventMachine.run do
         EventMachine.start_server(bind_address, port, GemeraldBeanstalk::Server, beanstalk)
-        EventMachine.add_periodic_timer(0.01, beanstalk.method(:update_waiting_connections))
+        EventMachine.add_periodic_timer(0.01, beanstalk.method(:update_state))
       end
     end
     return [thread, beanstalk]
