@@ -1,4 +1,5 @@
 require 'set'
+require 'state_machine'
 
 class GemeraldBeanstalk::Connection
 
@@ -7,46 +8,101 @@ class GemeraldBeanstalk::Connection
   attr_reader :beanstalk, :tube_used, :tubes_watched
   attr_writer :producer, :waiting, :worker
 
-  def alive?
-    return !closed?
+  state_machine :inbound_state, :initial => :ready, :namespace => :inbound do
+
+    state :ready do
+    end
+
+
+    state :waiting do
+    end
+
+
+    state :timed_out do
+    end
+
+
+    state :closed do
+    end
+
+
+    event :response_received do
+      transition :waiting => :ready
+    end
+
+
+    event :wait do
+      transition :ready => :waiting
+    end
+
+
+    event :wait_timed_out do
+      @wait_timeout = nil
+      transition :waiting => :timed_out
+    end
+
+
+    event :close do
+      transition any => :closed
+    end
+
   end
+
+  state_machine :outbound_state, :initial => :ready, :namespace => :outbound do
+
+    state :ready do
+    end
+
+
+    state :multi_part_request_pending do
+    end
+
+
+    state :closed do
+    end
+
+
+    event :multi_part_request_start do
+      transition :ready => :multi_part_request_pending
+    end
+
+
+    event :multi_part_request_complete do
+      @multi_part_request = nil
+      transition :multi_part_request_pending => :ready
+    end
+
+
+    event :close do
+      transition any => :closed
+    end
+
+  end
+
+
+  def alive?
+    return !(inbound_closed? || outbound_closed?)
+  end
+
 
   def close_connection
-    (@connection.close_connection rescue nil) unless @connection.nil?
-    @closed = true
-  end
-
-
-  def closed?
-    return @closed || false
-  end
-
-
-  def deadline_pending?
-    return false if @deadline.nil?
-    return true if Time.now.to_f <= @deadline
-
-    @deadline = nil
-    return false
+      close_inbound
+      close_outbound
+      (@connection.close_connection rescue nil) unless @connection.nil?
   end
 
 
   def execute(raw_command)
-    if @multi_part_request.nil?
-      parsed_command = parse_command(raw_command)
-      return if parsed_command.nil?
-      if parsed_command[0] == 'put' && parsed_command[-1] == REQUEST_BODY_PENDING
-        @multi_part_request = parsed_command
-        return
-      end
+    if outbound_multi_part_request_pending?
+      parsed_command = @multi_part_request.concat([raw_command])
+      multi_part_request_complete_outbound
     else
-      @multi_part_request[-1] = raw_command
-      parsed_command = @multi_part_request
-      @multi_part_request = nil
+      parsed_command = parse_command(raw_command)
+      return if parsed_command.nil? || outbound_multi_part_request_pending?
     end
-    #puts parsed_command.inspect
+    #puts "#{Time.now.to_f}: #{parsed_command.inspect}"
     response = beanstalk.execute(self, *parsed_command)
-    #puts response.inspect
+    #puts "#{Time.now.to_f}: #{response.inspect}"
     return response
   end
 
@@ -61,17 +117,28 @@ class GemeraldBeanstalk::Connection
     @connection = connection
     @tube_used = 'default'
     @tubes_watched = Set.new(%w[default])
+
+    # Initialize state machine
+    super()
   end
 
 
   def parse_command(raw_command)
     command_lines = raw_command.match(COMMAND_PARSER_REGEX)
-    return nil if command_lines.nil?
+    return if command_lines.nil?
+
     command_params = command_lines[:command].split(/\s/)
     if command_lines[:command][-1] =~ /\s/
-      command_params.push(GemeraldBeanstalk::Beanstalk::TRAILING_WHITESPACE)
+      command_params = ['bad_format!']
+    elsif command_params[0] == 'bad_format!'
+      command_params = []
     elsif command_params[0] == 'put'
-      command_params.push(command_lines[:body].nil? ? REQUEST_BODY_PENDING : "#{command_lines[:body]}\r\n")
+      if command_lines[:body].nil?
+        multi_part_request_start_outbound
+        @multi_part_request = command_params
+      else
+        command_params.push("#{command_lines[:body]}\r\n")
+      end
     end
     return command_params
   end
@@ -82,8 +149,10 @@ class GemeraldBeanstalk::Connection
   end
 
 
-  def set_deadline(deadline)
-    @deadline = deadline
+  def transmit(message)
+    response_received_inbound if waiting?
+    #puts "#{Time.now.to_f}: #{message}"
+    @connection.send_data(message) unless !alive? || @connection.nil?
   end
 
 
@@ -92,13 +161,22 @@ class GemeraldBeanstalk::Connection
   end
 
 
-  def watch(tube)
-    @tubes_watched << tube
+  def wait_inbound(timeout = nil, *args)
+    return false unless super
+    @wait_timeout = timeout
   end
 
 
   def waiting?
-    return !!@waiting
+    return false unless self.inbound_waiting?
+    return true if @wait_timeout.nil? || @wait_timeout > Time.now.to_f
+    wait_timed_out_inbound
+    return false
+  end
+
+
+  def watch(tube)
+    @tubes_watched << tube
   end
 
 

@@ -3,14 +3,20 @@ require 'set'
 require 'socket'
 
 class GemeraldBeanstalk::Beanstalk
-  COMMANDS = %w[bury delete ignore kick kick-job list-tubes list-tube-used
+  BEANSTALK_COMMANDS = %w[bury delete ignore kick kick-job list-tubes list-tube-used
     list-tubes-watched pause-tube peek peek-buried peek-delayed peek-ready put quit release
     reserve reserve-with-timeout stats stats-job stats-tube touch use watch]
 
-  COMMAND_METHOD_NAMES = Hash[COMMANDS.zip(COMMANDS)].merge!({'kick-job' => :kick_job, 'list-tubes' => :list_tubes, 'list-tube-used' => :list_tube_used,
-    'list-tubes-watched' => :list_tubes_watched, 'pause-tube' => :pause_tube, 'peek-buried' => :peek_buried,
-    'peek-delayed' => :peek_delayed, 'peek-ready' => :peek_ready, 'reserve-with-timeout' => :reserve_with_timeout,
-    'stats-job' => :stats_job, 'stats-tube' => :stats_tube})
+  CONNECTION_PARSER_ACCESSIBLE_COMMANDS = %w[bad_format!]
+
+  ALL_COMMANDS = BEANSTALK_COMMANDS + CONNECTION_PARSER_ACCESSIBLE_COMMANDS
+
+  special_case_method_names = {'kick-job' => 'kick_job', 'list-tubes' => 'list_tubes', 'list-tube-used' => 'list_tube_used',
+    'list-tubes-watched' => 'list_tubes_watched', 'pause-tube' => 'pause_tube', 'peek-buried' => 'peek_buried',
+    'peek-delayed' => 'peek_delayed', 'peek-ready' => 'peek_ready', 'reserve-with-timeout' => 'reserve_with_timeout',
+    'stats-job' => 'stats_job', 'stats-tube' => 'stats_tube'}
+
+  COMMAND_METHOD_NAMES = Hash[ALL_COMMANDS.zip(ALL_COMMANDS)].merge!(special_case_method_names)
 
   CONNECTION_SPECIFIC_COMMANDS = %w[bury delete ignore kick list-tube-used list-tubes-watched
     peek-buried peek-delayed peek-ready put quit release reserve reserve-with-timeout touch use watch]
@@ -18,7 +24,12 @@ class GemeraldBeanstalk::Beanstalk
   STATS_COMMANDS = %w[bury delete ignore kick list-tube-used list-tubes list-tubes-watched pause-tube peek
     peek-buried peek-delayed peek-ready put release reserve stats stats-job stats-tube use watch]
 
-  TRAILING_WHITESPACE = :trailing_whitespace
+  BAD_FORMAT = "BAD_FORMAT\r\n"
+  DEADLINE_SOON = "DEADLINE_SOON\r\n"
+  KICKED = "KICKED\r\n"
+  NOT_FOUND = "NOT_FOUND\r\n"
+  TIMED_OUT = "TIMED_OUT\r\n"
+  UNKNOWN_COMMAND = "UNKNOWN_COMMAND\r\n"
 
   attr_reader :address, :tubes, :connections
 
@@ -42,13 +53,13 @@ class GemeraldBeanstalk::Beanstalk
 
 
   def execute(connection, command = nil, *command_params)
-    return unknown_command! unless valid_command?(command)
+    return UNKNOWN_COMMAND unless valid_command?(command)
 
     adjust_stats_key("cmd-#{command}") if STATS_COMMANDS.include?(command)
 
     command_params.unshift(connection) if connection_specific_command?(command)
 
-    return bad_format! if COMMAND_METHOD_PARAMETER_COUNTS[command] != command_params.length || command_params[-1] == TRAILING_WHITESPACE
+    return BAD_FORMAT if COMMAND_METHOD_PARAMETER_COUNTS[command] != command_params.length
 
     return send(COMMAND_METHOD_NAMES[command], *command_params)
   end
@@ -61,7 +72,7 @@ class GemeraldBeanstalk::Beanstalk
     @id = SecureRandom.base64(16)
     @jobs = GemeraldBeanstalk::Jobs.new
     @mutex = Mutex.new
-    @reserved = Hash.new([])
+    @reserved = Hash.new {|reserved, key| reserved[key] = [] }
     @stats = Hash.new(0)
     @tubes = {}
     @up_at = Time.now.to_f
@@ -70,10 +81,29 @@ class GemeraldBeanstalk::Beanstalk
   end
 
 
-  def register_job_timeout
+  def register_job_timeout(connection, job)
+    @reserved[connection].delete(job)
     adjust_stats_key('job-timeouts')
+    honor_reservations(job, tube(job.tube_name))
   end
 
+
+  def update_waiting_connections
+    waiting_connections.each do |connection|
+      if connection.waiting?
+        if deadline_pending?(connection)
+          message_for_connection = DEADLINE_SOON
+        end
+      elsif connection.inbound_state_name == :timed_out
+        message_for_connection = TIMED_OUT
+      end
+      unless message_for_connection.nil?
+        cancel_reservations(connection)
+        connection.transmit(message_for_connection)
+      end
+    end
+    @reserved.values.flatten.each(&:update_state)
+  end
 
   protected
 
@@ -91,16 +121,23 @@ class GemeraldBeanstalk::Beanstalk
 
 
   def bad_format!
-    return "BAD_FORMAT\r\n"
+    return BAD_FORMAT
   end
 
 
   def bury(connection, job_id, priority)
-    job = find_job(job_id, :only => :reserved)
-    return not_found! if job.nil? || !job.bury(connection, priority)
+    job = find_job(job_id, :only => [:deadline_pending, :reserved])
+    return NOT_FOUND if job.nil? || !job.bury(connection, priority)
 
     @reserved[connection].delete(job)
     return "BURIED\r\n"
+  end
+
+
+  def cancel_reservations(connection)
+    connection.tubes_watched.each do |tube_name|
+      tube(tube_name).cancel_reservation(connection)
+    end
   end
 
 
@@ -109,32 +146,23 @@ class GemeraldBeanstalk::Beanstalk
   end
 
 
-  def deadline_soon!
-    return "DEADLINE_SOON\r\n"
+  def deadline_pending?(connection)
+    reserved_jobs = @reserved[connection]
+    return reserved_jobs.any?(&:deadline_pending?)
   end
 
 
   def delete(connection, job_id)
     job = find_job(job_id)
-    return not_found! if job.nil? || !job.delete(connection)
+    return NOT_FOUND if job.nil? || !job.delete(connection)
 
     @mutex.synchronize do
       tube(job.tube_name).delete(job)
       @jobs[job.id - 1] = nil
-      @reserved[connection].delete(job) if job.state_name == :reserved
+      @reserved[connection].delete(job) if %w[reserved deadline_pending].include?(job.state)
     end
 
     return "DELETED\r\n"
-  end
-
-
-  def ignore(connection, tube_name)
-    return "NOT_IGNORED\r\n" if connection.tubes_watched.length == 1
-
-    connection.ignore(tube_name)
-    tube(tube_name).ignore
-
-    return "WATCHING #{connection.tubes_watched.length}\r\n"
   end
 
 
@@ -146,6 +174,23 @@ class GemeraldBeanstalk::Beanstalk
 
     return nil if job.nil? || except.include?(job.state_name)
     return (only.empty? || only.include?(job.state_name)) ? job : nil
+  end
+
+
+  def honor_reservations(job, tube)
+    while !(next_reservation = tube.next_reservation).nil?
+      break if try_dispatch(job, next_reservation)
+    end
+  end
+
+
+  def ignore(connection, tube_name)
+    return "NOT_IGNORED\r\n" if connection.tubes_watched.length == 1
+
+    connection.ignore(tube_name)
+    tube(tube_name).ignore
+
+    return "WATCHING #{connection.tubes_watched.length}\r\n"
   end
 
 
@@ -165,9 +210,9 @@ class GemeraldBeanstalk::Beanstalk
 
   def kick_job(job_id)
     job = find_job(job_id, :only => [:buried, :delayed])
-    return not_found! if job.nil?
+    return NOT_FOUND if job.nil?
 
-    return job.kick ? "KICKED\r\n" : not_found!
+    return job.kick ? KICKED : NOT_FOUND
   end
 
 
@@ -199,13 +244,8 @@ class GemeraldBeanstalk::Beanstalk
   end
 
 
-  def not_found!
-    return "NOT_FOUND\r\n"
-  end
-
-
   def pause_tube(tube_name, delay)
-    return not_found! unless tube = tube(tube_name)
+    return NOT_FOUND unless tube = tube(tube_name)
 
     tube.pause(delay)
     return "PAUSED\r\n"
@@ -214,13 +254,13 @@ class GemeraldBeanstalk::Beanstalk
 
   def peek(job_id)
     job = find_job(job_id)
-    return job.nil? ? not_found! : "FOUND #{job.id} #{job.bytes}\r\n#{job.body}\r\n"
+    return job.nil? ? NOT_FOUND : "FOUND #{job.id} #{job.bytes}\r\n#{job.body}\r\n"
   end
 
 
   def peek_by_state(connection, state)
     job = tube(connection.tube_used).next_job(state, :peek)
-    return job.nil? ? not_found! : "FOUND #{job.id} #{job.bytes}\r\n#{job.body}\r\n"
+    return job.nil? ? NOT_FOUND : "FOUND #{job.id} #{job.bytes}\r\n#{job.body}\r\n"
   end
 
 
@@ -244,16 +284,20 @@ class GemeraldBeanstalk::Beanstalk
     return "JOB_TOO_BIG\r\n" if bytes > @max_job_size
     return "EXPECTED_CRLF\r\n" if body.length - 2 != bytes || body.slice!(-2, 2) != "\r\n"
 
-    id = nil
+    id = job = tube = nil
     @mutex.synchronize do
       id = @jobs.total_jobs + 1
       job = GemeraldBeanstalk::Job.new(self, id, connection.tube_used, priority, delay, ttr, bytes, body)
       @jobs.enqueue(job)
-      tube(connection.tube_used).put(job)
+      tube = tube(connection.tube_used)
+      tube.put(job)
     end
-    connection.producer = true unless connection.producer?
+    connection.producer = true
 
-    return "INSERTED #{id}\r\n"
+    # Send async so client doesn't wait while we check if job can be immediately dispatched
+    connection.transmit("INSERTED #{id}\r\n")
+
+    honor_reservations(job, tube)
   end
 
 
@@ -265,12 +309,12 @@ class GemeraldBeanstalk::Beanstalk
 
   def release(connection, job_id, priority, delay)
     job = find_job(job_id)
-    return not_found! if job.nil?
+    return NOT_FOUND if job.nil?
 
     delay = delay.to_i
     success = job.release(connection, priority.to_i, delay.to_i)
 
-    return bad_format! unless success
+    return BAD_FORMAT unless success
 
     @reserved[connection].delete(job)
     return "RELEASED\r\n"
@@ -278,42 +322,38 @@ class GemeraldBeanstalk::Beanstalk
 
 
   def reserve(connection)
-    return reserve_job(connection)
+    reserve_job(connection)
+    return nil
   end
 
 
   def reserve_job(connection, timeout = nil)
-    job = nil
-    reserved = false
-    timeout_at = Time.now.to_f + timeout unless [nil, 0].include?(timeout)
-    connection.worker = true unless connection.worker?
-    connection.waiting = true
-    while ([nil, 0].include?(timeout) || Time.now.to_f < timeout_at) && connection.alive?
-      @reserved[connection].each(&:state)
-      return deadline_soon! if connection.deadline_pending?
+    connection.worker = true
 
-      job = next_job(connection)
-      timeout == 0 ? break : next if job.nil?
-
-      @mutex.synchronize do
-        # Make sure another thread hasn't already cliamed this job
-        reserved = job.reserve(connection)
-      end
-      break if reserved || timeout == 0
+    if deadline_pending?(connection)
+      connection.transmit(DEADLINE_SOON)
+      return true
     end
-    connection.waiting = false
 
-    return nil if job.nil?
+    connection.tubes_watched.each do |tube_name|
+      tube(tube_name).reserve(connection)
+    end
+    connection.wait_inbound([nil, 0].include?(timeout) ? nil : Time.now.to_f + timeout)
 
-    @reserved[connection] << job
-    return "RESERVED #{job.id} #{job.bytes}\r\n#{job.body}\r\n"
+    dispatched = false
+    while !dispatched
+      break if (job = next_job(connection)).nil?
+      dispatched = try_dispatch(job, connection)
+    end
+
+    return dispatched
   end
 
 
-
   def reserve_with_timeout(connection, timeout)
-    job_message = reserve_job(connection, timeout.to_i)
-    return job_message.nil? ? "TIMED_OUT\r\n" : job_message
+    return nil if reserve_job(connection, timeout.to_i)
+    connection.wait_timed_out_inbound
+    return TIMED_OUT
   end
 
 
@@ -384,7 +424,7 @@ class GemeraldBeanstalk::Beanstalk
 
   def stats_job(job_id)
     job = find_job(job_id)
-    return not_found! if job.nil?
+    return NOT_FOUND if job.nil?
 
     statss = job.stats
     return yaml_response(statss.map{ |stat, value| "#{stat}: #{value}" })
@@ -392,18 +432,30 @@ class GemeraldBeanstalk::Beanstalk
 
 
   def stats_tube(tube_name)
-    return not_found! unless tube = tube(tube_name)
+    return NOT_FOUND unless tube = tube(tube_name)
 
     return yaml_response(tube.stats.map{ |stat, value| "#{stat}: #{value}" })
   end
 
 
   def touch(connection, job_id)
-    job = find_job(job_id, :only => :reserved)
-    return not_found! if job.nil?
+    job = find_job(job_id, :only => [:deadline_pending, :reserved])
+    return NOT_FOUND if job.nil?
 
     job.touch(connection)
     return "TOUCHED\r\n"
+  end
+
+
+  def try_dispatch(job, connection)
+    @mutex.synchronize do
+      # Make sure thread still waiting and job not claimed
+      return false unless connection.waiting? && job.reserve(connection)
+      cancel_reservations(connection)
+      @reserved[connection] << job
+    end
+    connection.transmit("RESERVED #{job.id} #{job.bytes}\r\n#{job.body}\r\n")
+    return true
   end
 
 
@@ -429,11 +481,6 @@ class GemeraldBeanstalk::Beanstalk
   end
 
 
-  def unknown_command!
-    return "UNKNOWN_COMMAND\r\n"
-  end
-
-
   def use(connection, tube_name)
     tube(tube_name, :create_if_missing).use
     connection.use(tube_name)
@@ -443,7 +490,12 @@ class GemeraldBeanstalk::Beanstalk
 
 
   def valid_command?(command)
-    return COMMANDS.include?(command)
+    return ALL_COMMANDS.include?(command)
+  end
+
+
+  def waiting_connections
+    return connections.select(&:waiting?)
   end
 
 
@@ -460,6 +512,6 @@ class GemeraldBeanstalk::Beanstalk
     return "OK #{response.bytesize}\r\n#{response}\r\n"
   end
 
-  COMMAND_METHOD_PARAMETER_COUNTS = Hash[COMMANDS.map {|command| [command, instance_method(COMMAND_METHOD_NAMES[command]).parameters.length] }]
+  COMMAND_METHOD_PARAMETER_COUNTS = Hash[ALL_COMMANDS.map {|command| [command, instance_method(COMMAND_METHOD_NAMES[command]).parameters.length] }]
 
 end

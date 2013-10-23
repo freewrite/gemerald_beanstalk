@@ -1,6 +1,6 @@
 class GemeraldBeanstalk::Tube
 
-  attr_reader :jobs, :name
+  attr_reader :jobs, :name, :reservartions
 
   state_machine :state, :initial => :ready do
     state :paused do
@@ -38,6 +38,10 @@ class GemeraldBeanstalk::Tube
   end
 
 
+  def cancel_reservation(connection)
+    return @reservations.delete(connection)
+  end
+
   def delete(job)
     adjust_stats_key('cmd-delete')
     return @jobs.delete(job)
@@ -58,6 +62,7 @@ class GemeraldBeanstalk::Tube
     @name = name
     @jobs = GemeraldBeanstalk::Jobs.new
     @mutex = Mutex.new
+    @reservations = []
     @stats = {
       'cmd-delete' => 0,
       'cmd-pause-tube' => 0,
@@ -81,6 +86,21 @@ class GemeraldBeanstalk::Tube
     end
 
     return best_candidate
+  end
+
+
+  def next_reservation
+    reservation = nil
+    while ready? && @reservations.any? && reservation.nil?
+      reservation = @reservations[0]
+      break if reservation.waiting?
+
+      @mutex.synchronize do
+        @reservations.shift
+      end
+      reservation = nil
+    end
+    return reservation
   end
 
 
@@ -112,6 +132,11 @@ class GemeraldBeanstalk::Tube
     @mutex.synchronize do
       @jobs.enqueue(job)
     end
+  end
+
+
+  def reserve(connection)
+    @reservations << connection
   end
 
 

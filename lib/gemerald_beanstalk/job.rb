@@ -3,7 +3,7 @@ require 'state_machine'
 class GemeraldBeanstalk::Job
   STATS_COMMANDS = [:bury, :kick, :release, :reserve]
   STATS_KEYS = {:bury => 'buries', :kick => 'kicks', :release => 'releases', :reserve => 'reserves'}
-  UPDATE_STATES = %w[delayed reserved]
+  UPDATE_STATES = %w[deadline_pending delayed reserved]
   attr_reader :beanstalk, :reserved_at, :reserved_by, :timeout_at
   attr_accessor :priority, :tube_name, :delay, :ready_at, :body,
     :bytes, :created_at, :ttr, :id, :stats_hash, :buried_at
@@ -29,8 +29,12 @@ class GemeraldBeanstalk::Job
     end
 
 
+    state :deadline_pending do
+    end
+
+
     event :bury do
-      transition :reserved => :buried
+      transition [:reserved, :deadline_pending] => :buried
     end
 
 
@@ -40,7 +44,7 @@ class GemeraldBeanstalk::Job
 
 
     event :delete do
-      transition [:buried, :delayed, :ready, :reserved] => :deleted
+      transition [:buried, :delayed, :ready, :reserved, :deadline_pending] => :deleted
     end
 
 
@@ -49,9 +53,20 @@ class GemeraldBeanstalk::Job
     end
 
 
-    event :timed_out do
-      transition :reserved => :ready
+    event :deadline_approaching do
+      # See #deadline_approaching
     end
+
+
+    event :timed_out do
+      # See #timed_out
+    end
+
+
+    event :touch do
+      transition [:deadline_pending, :reserved] => :reserved
+    end
+
 
     around_transition do |job, transition, block|
       if STATS_COMMANDS.include?(transition.event)
@@ -97,8 +112,20 @@ class GemeraldBeanstalk::Job
   end
 
 
+  def deadline_approaching(*args)
+    return false unless @state == 'reserved'
+    @state = 'deadline_pending'
+  end
+
+
+  def deadline_pending?
+    update_state
+    return super
+  end
+
+
   def delete(connection, *args)
-    return false if self.state_name == :reserved && !reserved_by_connection?(connection)
+    return false if [:deadline_pending, :reserved].include?(self.state_name) && !reserved_by_connection?(connection)
     return super
   end
 
@@ -118,7 +145,7 @@ class GemeraldBeanstalk::Job
 
     # Initilize state machine
     super()
-    @state = delay > 0 ? :delayed : :ready
+    @state = delay > 0 ? 'delayed' : 'ready'
   end
 
 
@@ -148,15 +175,16 @@ class GemeraldBeanstalk::Job
   def reserve(connection, *args)
     return false unless super
 
+    now = Time.now.to_f
     @reserved_by = connection
-    @reserved_at = Time.now.to_f
-    @timeout_at = Time.now.to_f + self.ttr
+    @reserved_at = now
+    @timeout_at = now + self.ttr
     return true
   end
 
 
   def reserved_by_connection?(connection)
-    return self.state_name == :reserved && self.reserved_by == connection ? true : false
+    return [:deadline_pending, :reserved].include?(self.state_name) && self.reserved_by == connection ? true : false
   end
 
 
@@ -183,7 +211,7 @@ class GemeraldBeanstalk::Job
     return {
       'id' => self.id,
       'tube' => self.tube_name,
-      'state' => self.state,
+      'state' => self.state == 'deadline_pending' ? 'reserved' : self.state,
       'pri' => self.priority,
       'age' => (Time.now.to_f - self.created_at).to_i,
       'delay' => self.delay || 0,
@@ -200,15 +228,17 @@ class GemeraldBeanstalk::Job
 
 
   def timed_out(*args)
-    self.beanstalk.register_job_timeout
+    return false unless %w[reserved deadline_pending].include?(@state)
     self.state = :ready
+    connection = self.reserved_by
     reset_reserve_state
-    return super
+    self.beanstalk.register_job_timeout(connection, self)
+    return true
   end
 
 
   def touch(connection)
-    return unless reserved_by_connection?(connection)
+    return unless reserved_by_connection?(connection) && super
     @timeout_at = Time.now.to_f + self.ttr
   end
 
@@ -218,12 +248,12 @@ class GemeraldBeanstalk::Job
 
     if @state == 'delayed' && self.ready_at <= Time.now.to_f
       @state = 'ready'
-    elsif @state == 'reserved'
+    elsif %w[reserved deadline_pending].include?(@state)
       now = Time.now.to_f
       if self.timeout_at <= now
         timed_out
-      elsif self.timeout_at <= now + 1
-        self.reserved_by.set_deadline(self.timeout_at)
+      elsif @state == 'reserved' && self.timeout_at <= now + 1
+        deadline_approaching
       end
     end
   end
