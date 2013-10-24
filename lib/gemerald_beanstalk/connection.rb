@@ -61,7 +61,7 @@ class GemeraldBeanstalk::Connection
 
   def execute(raw_command)
     if outbound_multi_part_request_pending?
-      parsed_command = @multi_part_request.puse(raw_command)
+      parsed_command = @multi_part_request.push(raw_command)
       multi_part_request_complete_outbound
     else
       parsed_command = parse_command(raw_command)
