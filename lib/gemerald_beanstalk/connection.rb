@@ -1,10 +1,7 @@
-require 'set'
-require 'state_machine'
-
 class GemeraldBeanstalk::Connection
 
-  REQUEST_BODY_PENDING = :request_body_pending
   COMMAND_PARSER_REGEX = /(?<command>.*?)(?:\r\n(?<body>.*))?\r\n\z/m
+
   attr_reader :beanstalk, :tube_used, :tubes_watched
   attr_writer :producer, :waiting, :worker
 
@@ -58,13 +55,13 @@ class GemeraldBeanstalk::Connection
   def close_connection
       close_inbound
       close_outbound
-      (@connection.close_connection rescue nil) unless @connection.nil?
+      @connection.close_connection unless @connection.nil?
   end
 
 
   def execute(raw_command)
     if outbound_multi_part_request_pending?
-      parsed_command = @multi_part_request.concat([raw_command])
+      parsed_command = @multi_part_request.puse(raw_command)
       multi_part_request_complete_outbound
     else
       parsed_command = parse_command(raw_command)
@@ -78,7 +75,9 @@ class GemeraldBeanstalk::Connection
 
 
   def ignore(tube)
+    return nil if @tubes_watched.length == 1
     @tubes_watched.delete(tube)
+    return @tubes_watched.length
   end
 
 
@@ -126,8 +125,8 @@ class GemeraldBeanstalk::Connection
   end
 
 
-  def use(tube)
-    @tube_used = tube
+  def use(tube_name)
+    @tube_used = tube_name
   end
 
 
@@ -147,6 +146,7 @@ class GemeraldBeanstalk::Connection
 
   def watch(tube)
     @tubes_watched << tube
+    return @tubes_watched.length
   end
 
 

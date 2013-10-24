@@ -16,6 +16,7 @@ class GemeraldBeanstalk::Jobs < Array
   def enqueue(job)
     @total_jobs += 1
     push(job)
+    return self
   end
 
 

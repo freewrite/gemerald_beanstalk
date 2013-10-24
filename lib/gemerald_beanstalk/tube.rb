@@ -73,7 +73,7 @@ class GemeraldBeanstalk::Tube
 
     best_candidate = nil
     @jobs.each do |candidate|
-      next unless candidate.state_name == state
+      next if candidate.state_name != state
       best_candidate = candidate if best_candidate.nil? || candidate < best_candidate
     end
 
@@ -97,24 +97,19 @@ class GemeraldBeanstalk::Tube
 
 
   def pause(delay, *args)
-    @mutex.synchronize do
-      return false unless super
-    end
+    return false unless super
     adjust_stats_key('cmd-pause-tube')
-    @pause_delay = delay
+    @pause_delay = delay.to_i
     @paused_at = Time.now.to_f
-    @resume_at = @paused_at + delay.to_i
+    @resume_at = @paused_at + @pause_delay
     return true
   end
 
 
   def paused?
     if self.state_name == :paused && @resume_at <= Time.now.to_f
-      @mutex.synchronize do
-        self.state = :ready
-        @pause_delay = 0
-        @paused_at = @resume_at = nil
-      end
+      self.state = 'ready'
+      @pause_delay = @paused_at = @resume_at = nil
     end
     super
   end
@@ -134,7 +129,6 @@ class GemeraldBeanstalk::Tube
 
   def stats
     job_stats = @jobs.counts_by_state
-    pause_time_left = paused? ? @resume_at - @paused_at : 0
     return {
       'name' => @name,
       'current-jobs-urgent' => job_stats['current-jobs-urgent'],
@@ -149,7 +143,7 @@ class GemeraldBeanstalk::Tube
       'cmd-delete' => @stats['cmd-delete'],
       'cmd-pause-tube' => @stats['cmd-pause-tube'],
       'pause' => @pause_delay || 0,
-      'pause-time-left' => pause_time_left,
+      'pause-time-left' => paused? ? @resume_at - @paused_at : 0,
     }
   end
 
