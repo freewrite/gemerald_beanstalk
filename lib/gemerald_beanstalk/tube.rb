@@ -129,6 +129,8 @@ class GemeraldBeanstalk::Tube
 
   def stats
     job_stats = @jobs.counts_by_state
+    # Need to call paused in advance to update state
+    pause_time_left = paused? ? @resume_at - @paused_at : 0
     return {
       'name' => @name,
       'current-jobs-urgent' => job_stats['current-jobs-urgent'],
@@ -143,7 +145,7 @@ class GemeraldBeanstalk::Tube
       'cmd-delete' => @stats['cmd-delete'],
       'cmd-pause-tube' => @stats['cmd-pause-tube'],
       'pause' => @pause_delay || 0,
-      'pause-time-left' => paused? ? @resume_at - @paused_at : 0,
+      'pause-time-left' => pause_time_left,
     }
   end
 

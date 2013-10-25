@@ -29,14 +29,17 @@ class GemeraldBeanstalk::Connection
   end
 
   state_machine :outbound_state, :initial => :ready, :namespace => :outbound do
+    event :begin_request do
+      transition [:ready, :multi_part_request_pending] => :request_in_progress
+    end
+
     event :multi_part_request_start do
       transition :ready => :multi_part_request_pending
     end
 
 
-    event :multi_part_request_complete do
-      @multi_part_request = nil
-      transition :multi_part_request_pending => :ready
+    event :complete_request do
+      transition :request_in_progress => :ready
     end
 
 
@@ -60,17 +63,19 @@ class GemeraldBeanstalk::Connection
 
 
   def execute(raw_command)
-    if outbound_multi_part_request_pending?
-      parsed_command = @multi_part_request.push(raw_command)
-      multi_part_request_complete_outbound
-    else
-      parsed_command = parse_command(raw_command)
-      return if parsed_command.nil? || outbound_multi_part_request_pending?
+    @mutex.synchronize do
+      return if inbound_state_name == :waiting || outbound_state_name == :request_in_progress
+      if outbound_multi_part_request_pending?
+        parsed_command = @multi_part_request.push(raw_command)
+      else
+        parsed_command = parse_command(raw_command)
+        return if parsed_command.nil? || outbound_multi_part_request_pending?
+      end
+      begin_request_outbound
+      #puts "#{Time.now.to_f}: #{parsed_command.inspect}"
+      response = beanstalk.execute(self, *parsed_command)
+      transmit(response) unless response.nil?
     end
-    #puts "#{Time.now.to_f}: #{parsed_command.inspect}"
-    response = beanstalk.execute(self, *parsed_command)
-    #puts "#{Time.now.to_f}: #{response.inspect}"
-    return response
   end
 
 
@@ -84,6 +89,7 @@ class GemeraldBeanstalk::Connection
   def initialize(beanstalk, connection = nil)
     @beanstalk = beanstalk
     @connection = connection
+    @mutex = Mutex.new
     @tube_used = 'default'
     @tubes_watched = Set.new(%w[default])
 
@@ -119,9 +125,11 @@ class GemeraldBeanstalk::Connection
 
 
   def transmit(message)
-    response_received_inbound if waiting?
+    return if !alive? || @connection.nil?
     #puts "#{Time.now.to_f}: #{message}"
-    @connection.send_data(message) unless !alive? || @connection.nil?
+    @connection.send_data(message)
+    complete_request_outbound
+    response_received_inbound if waiting?
   end
 
 

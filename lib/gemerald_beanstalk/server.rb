@@ -22,7 +22,6 @@ module GemeraldBeanstalk::Server
 
 
   def initialize(beanstalk)
-    @send_data_callback = proc {|response| send_data(response) unless response.nil? }
     @beanstalk = beanstalk
     super
   end
@@ -34,8 +33,7 @@ module GemeraldBeanstalk::Server
 
 
   def receive_data(data)
-    return if @connection.waiting?
-    EventMachine.defer(proc { @connection.execute(data) }, @send_data_callback)
+    EventMachine.defer(proc { @connection.execute(data) })
   end
 
 
