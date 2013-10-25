@@ -112,7 +112,7 @@ class GemeraldBeanstalk::Beanstalk
     waiting_connections.each do |connection|
       if connection.waiting? && deadline_pending?(connection)
         message_for_connection = DEADLINE_SOON
-      elsif connection.inbound_timed_out?
+      elsif connection.timed_out?
         message_for_connection = TIMED_OUT
       end
 
@@ -120,7 +120,7 @@ class GemeraldBeanstalk::Beanstalk
       cancel_reservations(connection)
       connection.transmit(message_for_connection)
     end
-    @reserved.values.flatten.each(&:update_state)
+    @reserved.values.flatten.each(&:state)
     @delayed.keep_if do |job|
       if job.delayed?
         true
@@ -185,7 +185,7 @@ class GemeraldBeanstalk::Beanstalk
     @mutex.synchronize do
       tube(job.tube_name).delete(job)
       @jobs[job.id - 1] = nil
-      @reserved[connection].delete(job) if JOB_RESERVED_STATES.include?(job.state_name)
+      @reserved[connection].delete(job) if JOB_RESERVED_STATES.include?(job.state)
     end
 
     return DELETED
@@ -198,8 +198,8 @@ class GemeraldBeanstalk::Beanstalk
 
     job = @jobs[job_id.to_i - 1]
 
-    return nil if job.nil? || except.include?(job.state_name)
-    return (only.empty? || only.include?(job.state_name)) ? job : nil
+    return nil if job.nil? || except.include?(job.state)
+    return (only.empty? || only.include?(job.state)) ? job : nil
   end
 
 
@@ -366,7 +366,7 @@ class GemeraldBeanstalk::Beanstalk
     connection.tubes_watched.each do |tube_name|
       tube(tube_name).reserve(connection)
     end
-    connection.wait_inbound([nil, 0].include?(timeout) ? nil : Time.now.to_f + timeout)
+    connection.wait([nil, 0].include?(timeout) ? nil : Time.now.to_f + timeout)
 
     dispatched = false
     while !dispatched
@@ -380,7 +380,7 @@ class GemeraldBeanstalk::Beanstalk
 
   def reserve_with_timeout(connection, timeout)
     return nil if reserve_job(connection, timeout.to_i)
-    connection.wait_timed_out_inbound
+    connection.wait_timed_out
     return TIMED_OUT
   end
 

@@ -1,78 +1,57 @@
+require 'debugger'
 class GemeraldBeanstalk::Connection
 
   COMMAND_PARSER_REGEX = /(?<command>.*?)(?:\r\n(?<body>.*))?\r\n\z/m
 
+  BEGIN_REQUEST_STATES = [:ready, :multi_part_request_in_progress]
+
   attr_reader :beanstalk, :tube_used, :tubes_watched
   attr_writer :producer, :waiting, :worker
 
-  state_machine :inbound_state, :initial => :ready, :namespace => :inbound do
-    event :response_received do
-      transition :waiting => :ready
-    end
-
-
-    event :wait do
-      transition :ready => :waiting
-    end
-
-
-    event :wait_timed_out do
-      @wait_timeout = nil
-      transition :waiting => :timed_out
-    end
-
-
-    event :close do
-      transition any => :closed
-    end
-
-  end
-
-  state_machine :outbound_state, :initial => :ready, :namespace => :outbound do
-    event :begin_request do
-      transition [:ready, :multi_part_request_pending] => :request_in_progress
-    end
-
-    event :multi_part_request_start do
-      transition :ready => :multi_part_request_pending
-    end
-
-
-    event :complete_request do
-      transition :request_in_progress => :ready
-    end
-
-
-    event :close do
-      transition any => :closed
-    end
-
-  end
-
 
   def alive?
-    return !(inbound_closed? || outbound_closed?)
+    return @inbound_state != :closed && @oubound_state != :closed
+  end
+
+
+  def begin_multi_part_request
+    return false unless outbound_ready?
+    @outbound_state = :multi_part_request_in_progress
+    return true
+  end
+
+
+  def begin_request
+    return false unless BEGIN_REQUEST_STATES.include?(@outbound_state)
+    @outbound_state = :request_in_progress
+    return true
   end
 
 
   def close_connection
-      close_inbound
-      close_outbound
-      @connection.close_connection unless @connection.nil?
+    @inbound_state = @outbound_state = :closed
+    @connection.close_connection unless @connection.nil?
+  end
+
+
+  def complete_request
+    return false unless request_in_progress?
+    @outbound_state = :ready
+    return true
   end
 
 
   def execute(raw_command)
     @mutex.synchronize do
-      return if inbound_state_name == :waiting || outbound_state_name == :request_in_progress
-      if outbound_multi_part_request_pending?
+      return if waiting? || request_in_progress?
+      if multi_part_request_in_progress?
         parsed_command = @multi_part_request.push(raw_command)
       else
         parsed_command = parse_command(raw_command)
-        return if parsed_command.nil? || outbound_multi_part_request_pending?
+        return if parsed_command.nil? || multi_part_request_in_progress?
       end
-      begin_request_outbound
-      #puts "#{Time.now.to_f}: #{parsed_command.inspect}"
+      begin_request
+      # puts "#{Time.now.to_f}: #{parsed_command.inspect}"
       response = beanstalk.execute(self, *parsed_command)
       transmit(response) unless response.nil?
     end
@@ -86,15 +65,29 @@ class GemeraldBeanstalk::Connection
   end
 
 
+  def inbound_ready?
+    return @inbound_state == :ready
+  end
+
+
   def initialize(beanstalk, connection = nil)
     @beanstalk = beanstalk
     @connection = connection
+    @inbound_state = :ready
     @mutex = Mutex.new
+    @outbound_state = :ready
     @tube_used = 'default'
     @tubes_watched = Set.new(%w[default])
+  end
 
-    # Initialize state machine
-    super()
+
+  def multi_part_request_in_progress?
+    return @outbound_state == :multi_part_request_in_progress
+  end
+
+
+  def outbound_ready?
+    return @outbound_state == :ready
   end
 
 
@@ -109,7 +102,7 @@ class GemeraldBeanstalk::Connection
       command_params = []
     elsif command_params[0] == 'put'
       if command_lines[:body].nil?
-        multi_part_request_start_outbound
+        begin_multi_part_request
         @multi_part_request = command_params
       else
         command_params.push("#{command_lines[:body]}\r\n")
@@ -124,12 +117,30 @@ class GemeraldBeanstalk::Connection
   end
 
 
+  def request_in_progress?
+    return @outbound_state == :request_in_progress
+  end
+
+
+  def response_received
+    return false unless waiting?
+    @inbound_state = :ready
+    return true
+  end
+
+
+  def timed_out?
+    return @inbound_state == :timed_out
+  end
+
+
   def transmit(message)
     return if !alive? || @connection.nil?
-    #puts "#{Time.now.to_f}: #{message}"
+    # puts "#{Time.now.to_f}: #{message}"
     @connection.send_data(message)
-    complete_request_outbound
-    response_received_inbound if waiting?
+    complete_request
+    response_received
+    return self
   end
 
 
@@ -138,16 +149,26 @@ class GemeraldBeanstalk::Connection
   end
 
 
-  def wait_inbound(timeout = nil, *args)
-    return false unless super
+  def wait(timeout = nil)
+    return false unless inbound_ready?
     @wait_timeout = timeout
+    @inbound_state = :waiting
+    return true
+  end
+
+
+  def wait_timed_out
+    return false unless @inbound_state == :waiting
+    @wait_timeout = nil
+    @inbound_state = :timed_out
+    return true
   end
 
 
   def waiting?
-    return false unless self.inbound_waiting?
+    return false unless @inbound_state == :waiting
     return true if @wait_timeout.nil? || @wait_timeout > Time.now.to_f
-    wait_timed_out_inbound
+    wait_timed_out
     return false
   end
 

@@ -1,20 +1,8 @@
 class GemeraldBeanstalk::Tube
 
+  DEACTIVATION_STATES = [:paused, :ready]
+
   attr_reader :jobs, :name, :reservartions
-
-  state_machine :state, :initial => :ready do
-    event :pause do
-      transition :ready => :paused
-    end
-
-    event :resume do
-      transition :paused => :ready
-    end
-
-    event :deactivate do
-      transition [:paused, :ready] => :deactivated unless self.name == 'default'
-    end
-  end
 
 
   def active?
@@ -31,6 +19,18 @@ class GemeraldBeanstalk::Tube
 
   def cancel_reservation(connection)
     return @reservations.delete(connection)
+  end
+
+
+  def deactivate
+    return false unless DEACTIVATION_STATES.include?(@state) && self.name != 'default'
+    @state = :deactivated
+    return true
+  end
+
+
+  def deactivated?
+    return @state == :deactivated
   end
 
 
@@ -55,6 +55,7 @@ class GemeraldBeanstalk::Tube
     @jobs = GemeraldBeanstalk::Jobs.new
     @mutex = Mutex.new
     @reservations = []
+    @state = :ready
     @stats = {
       'cmd-delete' => 0,
       'cmd-pause-tube' => 0,
@@ -62,9 +63,6 @@ class GemeraldBeanstalk::Tube
       'waiting' => 0,
       'watching' => 0,
     }
-
-    # Initialize state machine
-    super()
   end
 
 
@@ -73,7 +71,7 @@ class GemeraldBeanstalk::Tube
 
     best_candidate = nil
     @jobs.each do |candidate|
-      next if candidate.state_name != state
+      next if candidate.state != state
       best_candidate = candidate if best_candidate.nil? || candidate < best_candidate
     end
 
@@ -97,7 +95,8 @@ class GemeraldBeanstalk::Tube
 
 
   def pause(delay, *args)
-    return false unless super
+    return false unless ready?
+    @state = :paused
     adjust_stats_key('cmd-pause-tube')
     @pause_delay = delay.to_i
     @paused_at = Time.now.to_f
@@ -107,11 +106,11 @@ class GemeraldBeanstalk::Tube
 
 
   def paused?
-    if self.state_name == :paused && @resume_at <= Time.now.to_f
-      self.state = 'ready'
-      @pause_delay = @paused_at = @resume_at = nil
-    end
-    super
+    return false unless @state == :paused
+    return true if @resume_at > Time.now.to_f
+    @state = :ready
+    @pause_delay = @paused_at = @resume_at = nil
+    return false
   end
 
 
@@ -122,8 +121,20 @@ class GemeraldBeanstalk::Tube
   end
 
 
+  def ready?
+    return @state == :ready
+  end
+
+
   def reserve(connection)
     @reservations << connection
+  end
+
+
+  def resume
+    return false unless paused?
+    @state = :ready
+    return true
   end
 
 
