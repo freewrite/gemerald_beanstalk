@@ -1,6 +1,4 @@
-require 'debugger'
 class GemeraldBeanstalk::Job
-
 
   INACTIVE_STATES = [:buried, :delayed]
   RESERVED_STATES = [:deadline_pending, :reserved]
@@ -156,9 +154,10 @@ class GemeraldBeanstalk::Job
     if @state == :delayed && self.ready_at <= now
       @state = :ready
     elsif RESERVED_STATES.include?(@state)
-      if now > self.timeout_at
+      # Rescue from timeout being reset by other thread
+      if (now > self.timeout_at rescue false)
         timed_out
-      elsif @state == :reserved && now + 1 > self.timeout_at
+      elsif (@state == :reserved && now + 1 > self.timeout_at rescue false)
         deadline_approaching
       end
     end

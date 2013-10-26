@@ -1,5 +1,6 @@
 require 'set'
 require 'gemerald_beanstalk/version'
+require 'thread_safe'
 require 'gemerald_beanstalk/job'
 require 'gemerald_beanstalk/beanstalk'
 require 'gemerald_beanstalk/connection'

@@ -87,15 +87,15 @@ class GemeraldBeanstalk::Beanstalk
   def initialize(address, max_job_size = 65535)
     @max_job_size = max_job_size
     @address = address
-    @connections = []
-    @delayed = []
+    @connections = ThreadSafe::Array.new
+    @delayed = ThreadSafe::Array.new
     @id = SecureRandom.base64(16)
     @jobs = GemeraldBeanstalk::Jobs.new
     @mutex = Mutex.new
-    @paused = []
-    @reserved = Hash.new {|reserved, key| reserved[key] = [] }
-    @stats = Hash.new(0)
-    @tubes = {}
+    @paused = ThreadSafe::Array.new
+    @reserved = ThreadSafe::Cache.new {|reserved, key| reserved[key] = [] }
+    @stats = ThreadSafe::Hash.new(0)
+    @tubes = ThreadSafe::Cache.new
     @up_at = Time.now.to_f
 
     tube('default', :create_if_missing)
@@ -144,14 +144,14 @@ class GemeraldBeanstalk::Beanstalk
   protected
 
   def active_tubes
-    return @tubes.select { |tube_name, tube| tube.active? }
+    tubes = {}
+    @tubes.each_pair { |tube_name, tube| tubes[tube_name] = tube if tube.active? }
+    return tubes
   end
 
 
   def adjust_stats_key(key, adjustment = 1)
-    @mutex.synchronize do
-      @stats[key] += adjustment
-    end
+    @stats[key] += adjustment
   end
 
 
@@ -191,11 +191,9 @@ class GemeraldBeanstalk::Beanstalk
     job = find_job(job_id)
     return NOT_FOUND if job.nil? || !job.delete(connection)
 
-    @mutex.synchronize do
-      tube(job.tube_name).delete(job)
-      @jobs[job.id - 1] = nil
-      @reserved[connection].delete(job) if JOB_RESERVED_STATES.include?(job.state)
-    end
+    tube(job.tube_name).delete(job)
+    @jobs[job.id - 1] = nil
+    @reserved[connection].delete(job) if JOB_RESERVED_STATES.include?(job.state)
 
     return DELETED
   end
@@ -229,11 +227,9 @@ class GemeraldBeanstalk::Beanstalk
 
 
   def ignore(connection, tube_name)
-    @mutex.synchronize do
-      return NOT_IGNORED if (watched_count = connection.ignore(tube_name)).nil?
-      tube(tube_name).ignore
-      return "WATCHING #{watched_count}\r\n"
-    end
+    return NOT_IGNORED if (watched_count = connection.ignore(tube_name)).nil?
+    tube(tube_name).ignore
+    return "WATCHING #{watched_count}\r\n"
   end
 
 
@@ -493,7 +489,7 @@ class GemeraldBeanstalk::Beanstalk
 
 
   def try_dispatch(connection, job)
-    @mutex.synchronize do
+    connection.mutex.synchronize do
       # Make sure connection still waiting and job not claimed
       return false unless connection.waiting? && job.reserve(connection)
       connection.transmit("RESERVED #{job.id} #{job.bytes}\r\n#{job.body}\r\n")

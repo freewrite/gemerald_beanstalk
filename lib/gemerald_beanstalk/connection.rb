@@ -1,11 +1,10 @@
-require 'debugger'
 class GemeraldBeanstalk::Connection
 
   COMMAND_PARSER_REGEX = /(?<command>.*?)(?:\r\n(?<body>.*))?\r\n\z/m
 
   BEGIN_REQUEST_STATES = [:ready, :multi_part_request_in_progress]
 
-  attr_reader :beanstalk, :tube_used, :tubes_watched
+  attr_reader :beanstalk, :mutex, :tube_used, :tubes_watched
   attr_writer :producer, :waiting, :worker
 
 
@@ -42,6 +41,7 @@ class GemeraldBeanstalk::Connection
 
 
   def execute(raw_command)
+    parsed_command = nil
     @mutex.synchronize do
       return if waiting? || request_in_progress?
       if multi_part_request_in_progress?
@@ -51,10 +51,10 @@ class GemeraldBeanstalk::Connection
         return if parsed_command.nil? || multi_part_request_in_progress?
       end
       begin_request
-      # puts "#{Time.now.to_f}: #{parsed_command.inspect}"
-      response = beanstalk.execute(self, *parsed_command)
-      transmit(response) unless response.nil?
     end
+    # puts "#{Time.now.to_f}: #{parsed_command.inspect}"
+    response = beanstalk.execute(self, *parsed_command)
+    transmit(response) unless response.nil?
   end
 
 

@@ -11,9 +11,7 @@ class GemeraldBeanstalk::Tube
 
 
   def adjust_stats_key(key, adjustment = 1)
-    @mutex.synchronize do
-      return @stats[key] += adjustment
-    end
+    return @stats[key] += adjustment
   end
 
 
@@ -53,16 +51,14 @@ class GemeraldBeanstalk::Tube
   def initialize(name)
     @name = name
     @jobs = GemeraldBeanstalk::Jobs.new
-    @mutex = Mutex.new
     @reservations = []
     @state = :ready
-    @stats = {
-      'cmd-delete' => 0,
-      'cmd-pause-tube' => 0,
-      'using' => 0,
-      'waiting' => 0,
-      'watching' => 0,
-    }
+    @stats = ThreadSafe::Cache.new
+    @stats['cmd-delete'] = 0
+    @stats['cmd-pause-tube'] = 0
+    @stats['using'] = 0
+    @stats['waiting'] = 0
+    @stats['watching'] = 0
   end
 
 
@@ -85,9 +81,7 @@ class GemeraldBeanstalk::Tube
       reservation = @reservations[0]
       break if reservation.waiting?
 
-      @mutex.synchronize do
-        @reservations.shift
-      end
+      @reservations.shift
       reservation = nil
     end
     return reservation
@@ -115,9 +109,7 @@ class GemeraldBeanstalk::Tube
 
 
   def put(job)
-    @mutex.synchronize do
-      @jobs.enqueue(job)
-    end
+    @jobs.enqueue(job)
   end
 
 

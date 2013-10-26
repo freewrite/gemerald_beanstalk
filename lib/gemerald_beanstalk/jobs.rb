@@ -1,4 +1,4 @@
-class GemeraldBeanstalk::Jobs < Array
+class GemeraldBeanstalk::Jobs < ThreadSafe::Array
   attr_reader :total_jobs
 
   def counts_by_state
