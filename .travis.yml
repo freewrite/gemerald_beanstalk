@@ -7,10 +7,11 @@ rvm:
   - rbx-2.0.0
 
 before_script:
+  - bundle config
   - rake start_test_server &
   - git clone https://github.com/beanstalkd/beaneater.git /tmp/beaneater
   - cd /tmp/beaneater
-  - bundle install --without test
+  - bundle install
   - git clone https://github.com/nesquena/backburner.git /tmp/backburner
   - cd /tmp/backburner
   - bundle install
