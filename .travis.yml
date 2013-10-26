@@ -17,6 +17,6 @@ before_script:
 
 script:
   - cd /tmp/beaneater
-  - rake
+  - rake test:full
   - cd /tmp/backburner
   - rake
