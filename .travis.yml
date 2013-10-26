@@ -10,10 +10,10 @@ before_script:
   - rake start_test_server &
   - git clone https://github.com/beanstalkd/beaneater.git /tmp/beaneater
   - cd /tmp/beaneater
-  - bundle
+  - bundle install
   - git clone https://github.com/nesquena/backburner.git /tmp/backburner
   - cd /tmp/backburner
-  - bundle
+  - bundle install
 
 script:
   - cd /tmp/beaneater
