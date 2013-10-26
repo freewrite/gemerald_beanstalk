@@ -92,6 +92,7 @@ class GemeraldBeanstalk::Beanstalk
     @id = SecureRandom.base64(16)
     @jobs = GemeraldBeanstalk::Jobs.new
     @mutex = Mutex.new
+    @paused = []
     @reserved = Hash.new {|reserved, key| reserved[key] = [] }
     @stats = Hash.new(0)
     @tubes = {}
@@ -126,6 +127,14 @@ class GemeraldBeanstalk::Beanstalk
         true
       else
         honor_reservations(job)
+        false
+      end
+    end
+    @paused.keep_if do |tube|
+      if tube.paused?
+        true
+      else
+        honor_reservations(tube)
         false
       end
     end
@@ -203,10 +212,18 @@ class GemeraldBeanstalk::Beanstalk
   end
 
 
-  def honor_reservations(job, tube = nil)
-    tube ||= tube(job.tube_name)
-    while !(next_reservation = tube.next_reservation).nil?
-      break if try_dispatch(next_reservation, job)
+  def honor_reservations(job_or_tube, tube = nil)
+    if job_or_tube.is_a?(GemeraldBeanstalk::Job)
+      job = job_or_tube
+      tube ||= tube(job.tube_name)
+    elsif job_or_tube.is_a?(GemeraldBeanstalk::Tube)
+      tube = job_or_tube
+      job = tube.next_job
+    end
+
+    while job && (next_reservation = tube.next_reservation)
+      next unless try_dispatch(next_reservation, job)
+      job = tube.next_job
     end
   end
 
@@ -274,6 +291,7 @@ class GemeraldBeanstalk::Beanstalk
     return NOT_FOUND if (tube = tube(tube_name)).nil?
 
     tube.pause(delay)
+    @paused << tube
     return PAUSED
   end
 
