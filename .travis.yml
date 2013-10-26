@@ -9,7 +9,7 @@ rvm:
 before_script:
   - git clone https://github.com/beanstalkd/beaneater.git /tmp/beaneater
   - git clone https://github.com/nesquena/backburner.git /tmp/backburner
-  - rake start_test_server
+  - rake start_test_server &
 
 script:
   - cd /tmp/beaneater
