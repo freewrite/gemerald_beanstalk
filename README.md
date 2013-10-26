@@ -1,4 +1,5 @@
 # GemeraldBeanstalk
+[![Build Status](https://travis-ci.org/freewrite/gemerald_beanstalk.png?branch=master)](https://travis-ci.org/freewrite/gemerald_beanstalk)
 
 GemeraldBeanstalk offers a Ruby implementation of beanstalkd for testing and other uses.
 
