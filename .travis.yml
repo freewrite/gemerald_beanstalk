@@ -10,14 +10,12 @@ before_script:
   - bundle config
   - rake start_test_server &
   - git clone https://github.com/beanstalkd/beaneater.git /tmp/beaneater
-  - cd /tmp/beaneater
-  - bundle install
+  - BUNDLE_GEMFILE=/tmp/beaneater/Gemfile bundle install
   - git clone https://github.com/nesquena/backburner.git /tmp/backburner
-  - cd /tmp/backburner
-  - bundle install
+  - BUNDLE_GEMFILE=/tmp/backburner/Gemfile bundle install
 
 script:
   - cd /tmp/beaneater
-  - rake test:full
+  - BUNDLE_GEMFILE=/tmp/beaneater/Gemfile bundle exec rake test:full
   - cd /tmp/backburner
-  - rake
+  - BUNDLE_GEMFILE=/tmp/backburner/Gemfile bundle exec rake
