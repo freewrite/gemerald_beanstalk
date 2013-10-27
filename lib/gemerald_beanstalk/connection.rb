@@ -41,6 +41,7 @@ class GemeraldBeanstalk::Connection
 
 
   def execute(raw_command)
+    puts "#{Time.now.to_f}: #{raw_command}" if ENV['VERBOSE']
     parsed_command = nil
     @mutex.synchronize do
       return if waiting? || request_in_progress?
@@ -52,7 +53,7 @@ class GemeraldBeanstalk::Connection
       end
       begin_request
     end
-    # puts "#{Time.now.to_f}: #{parsed_command.inspect}"
+    puts "#{Time.now.to_f}: #{parsed_command.inspect}" if ENV['VERBOSE']
     response = beanstalk.execute(self, *parsed_command)
     transmit(response) unless response.nil?
   end
@@ -136,7 +137,7 @@ class GemeraldBeanstalk::Connection
 
   def transmit(message)
     return if !alive? || @connection.nil?
-    # puts "#{Time.now.to_f}: #{message}"
+    puts "#{Time.now.to_f}: #{message}" if ENV['VERBOSE']
     @connection.send_data(message)
     complete_request
     response_received
