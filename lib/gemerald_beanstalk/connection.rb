@@ -96,20 +96,32 @@ class GemeraldBeanstalk::Connection
     command_lines = raw_command.match(COMMAND_PARSER_REGEX)
     return if command_lines.nil?
 
-    command_params = command_lines[:command].split(/\s/)
+    command_params = command_lines[:command].split(/ /)
     if command_lines[:command][-1] =~ /\s/
-      command_params = ['bad_format!']
+      command_params = %w[bad_format!]
     elsif command_params[0] == 'bad_format!'
       command_params = []
     elsif command_params[0] == 'put'
-      if command_lines[:body].nil?
-        begin_multi_part_request
-        @multi_part_request = command_params
-      else
-        command_params.push("#{command_lines[:body]}\r\n")
-      end
+      command_params = parse_put(command_params, command_lines[:body])
     end
     return command_params
+  end
+
+
+  # Handle some put parsing in connection because of multi-part possibility
+  def parse_put(command_params, body)
+    (1..4).each do |index|
+      int_param = command_params[index].to_i
+      return %w[bad_format!] if int_param.to_s != command_params[index] || int_param < 0
+      command_params[index] = command_params[index].to_i
+    end
+
+    if body.nil?
+      begin_multi_part_request
+      @multi_part_request = command_params
+    else
+      command_params.push("#{body}\r\n")
+    end
   end
 
 

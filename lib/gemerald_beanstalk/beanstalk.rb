@@ -50,7 +50,7 @@ class GemeraldBeanstalk::Beanstalk
   JOB_INACTIVE_STATES = GemeraldBeanstalk::Job::INACTIVE_STATES
   JOB_RESERVED_STATES = GemeraldBeanstalk::Job::RESERVED_STATES
 
-  attr_reader :address
+  attr_reader :address, :max_job_size
 
   def connect(connection = nil)
     beanstalk_connection = GemeraldBeanstalk::Connection.new(self, connection)
@@ -84,8 +84,8 @@ class GemeraldBeanstalk::Beanstalk
   end
 
 
-  def initialize(address, max_job_size = 65535)
-    @max_job_size = max_job_size
+  def initialize(address, maximum_job_size = 2**16)
+    @max_job_size = maximum_job_size
     @address = address
     @connections = ThreadSafe::Array.new
     @delayed = ThreadSafe::Array.new

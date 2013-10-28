@@ -1,5 +1,7 @@
 class GemeraldBeanstalk::Job
 
+  MAX_JOB_PRIORITY = 2**32
+
   INACTIVE_STATES = [:buried, :delayed]
   RESERVED_STATES = [:deadline_pending, :reserved]
   UPDATE_STATES = [:deadline_pending, :delayed, :reserved]
@@ -82,10 +84,10 @@ class GemeraldBeanstalk::Job
     @stats_hash = Hash.new(0)
     self.id = id
     self.tube_name = tube_name
-    self.priority = priority.to_i
-    self.delay = delay = delay.to_i
-    self.ttr = ttr.to_i
-    self.bytes = bytes.to_i
+    self.priority = priority % MAX_JOB_PRIORITY
+    self.delay = delay = delay
+    self.ttr = ttr == 0 ? 1 : ttr
+    self.bytes = bytes
     self.body = body
     self.created_at = Time.now.to_f
     self.ready_at = self.created_at + delay

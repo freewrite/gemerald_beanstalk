@@ -23,6 +23,7 @@ module GemeraldBeanstalk::Server
 
   def initialize(beanstalk)
     @beanstalk = beanstalk
+    @partial_message = ''
     super
   end
 
@@ -33,7 +34,13 @@ module GemeraldBeanstalk::Server
 
 
   def receive_data(data)
-    EventMachine.defer(proc { @connection.execute(data) })
+    if data[-2, 2] == "\r\n"
+      message = @partial_message + data
+      @partial_message = ''
+      EventMachine.defer(proc { @connection.execute(message) })
+    else
+      @partial_message += data
+    end
   end
 
 
