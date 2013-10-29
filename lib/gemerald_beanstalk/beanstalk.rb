@@ -50,6 +50,8 @@ class GemeraldBeanstalk::Beanstalk
   JOB_INACTIVE_STATES = GemeraldBeanstalk::Job::INACTIVE_STATES
   JOB_RESERVED_STATES = GemeraldBeanstalk::Job::RESERVED_STATES
 
+  VALID_TUBE_NAME_REGEX = /\A[a-zA-Z0-9_+\/;.$()]{1}[a-zA-Z0-9_\-+\/;.$()]*\z/
+
   attr_reader :address, :max_job_size
 
   def connect(connection = nil)
@@ -518,6 +520,7 @@ class GemeraldBeanstalk::Beanstalk
 
 
   def use(connection, tube_name)
+    return BAD_FORMAT unless valid_tube_name?(tube_name)
     tube(tube_name, :create_if_missing).use
     connection.use(tube_name)
 
@@ -530,12 +533,18 @@ class GemeraldBeanstalk::Beanstalk
   end
 
 
+  def valid_tube_name?(tube_name)
+    return tube_name.bytesize <= 200 && VALID_TUBE_NAME_REGEX =~ tube_name
+  end
+
+
   def waiting_connections
     return @connections.select(&:waiting?)
   end
 
 
   def watch(connection, tube_name)
+    return BAD_FORMAT unless valid_tube_name?(tube_name)
     tube(tube_name, :create_if_missing).watch
     watched_count = connection.watch(tube_name)
 
