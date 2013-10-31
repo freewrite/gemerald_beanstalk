@@ -136,7 +136,7 @@ class GemeraldBeanstalk::Connection
 
 
   def response_received
-    return false unless waiting?
+    return false unless waiting? || timed_out?
     @inbound_state = :ready
     return true
   end

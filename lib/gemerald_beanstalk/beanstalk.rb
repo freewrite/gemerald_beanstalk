@@ -395,7 +395,8 @@ class GemeraldBeanstalk::Beanstalk
 
 
   def reserve_with_timeout(connection, timeout)
-    return nil if reserve_job(connection, timeout.to_i)
+    timeout = timeout.to_i
+    return nil if reserve_job(connection, timeout) || timeout > 0
     connection.wait_timed_out
     return TIMED_OUT
   end
@@ -539,7 +540,7 @@ class GemeraldBeanstalk::Beanstalk
 
 
   def waiting_connections
-    return @connections.select(&:waiting?)
+    return @connections.select {|connection| connection.waiting? || connection.timed_out? }
   end
 
 

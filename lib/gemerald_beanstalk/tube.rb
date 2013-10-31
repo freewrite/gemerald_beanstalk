@@ -144,7 +144,7 @@ class GemeraldBeanstalk::Tube
       'total-jobs' => @jobs.total_jobs,
       'current-using' => @stats['using'],
       'current-watching' => @stats['watching'],
-      'current-waiting' => @stats['waiting'],
+      'current-waiting' => @reservations.length,
       'cmd-delete' => @stats['cmd-delete'],
       'cmd-pause-tube' => @stats['cmd-pause-tube'],
       'pause' => @pause_delay || 0,
