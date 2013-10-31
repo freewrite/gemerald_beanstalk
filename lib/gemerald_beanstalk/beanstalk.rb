@@ -355,9 +355,8 @@ class GemeraldBeanstalk::Beanstalk
 
 
   def release(connection, job_id, priority, delay)
-    job = find_job(job_id)
-    return NOT_FOUND if job.nil?
-    return BAD_FORMAT unless job.release(connection, priority.to_i, delay.to_i)
+    job = find_job(job_id, :only => JOB_RESERVED_STATES)
+    return NOT_FOUND if job.nil? || !job.release(connection, priority.to_i, delay.to_i)
 
     @reserved[connection].delete(job)
     @delayed << job if job.delayed?
