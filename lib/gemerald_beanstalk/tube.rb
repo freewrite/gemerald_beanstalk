@@ -1,7 +1,5 @@
 class GemeraldBeanstalk::Tube
 
-  DEACTIVATION_STATES = [:paused, :ready]
-
   attr_reader :jobs, :name, :reservartions
 
 
@@ -21,7 +19,7 @@ class GemeraldBeanstalk::Tube
 
 
   def deactivate
-    return false unless DEACTIVATION_STATES.include?(@state) && self.name != 'default'
+    return false if @state == :deactivated || self.name == 'default'
     @state = :deactivated
     return true
   end
@@ -45,6 +43,7 @@ class GemeraldBeanstalk::Tube
 
   def ignore
     adjust_stats_key('watching', -1)
+    deactivate if should_deactivate?
   end
 
 
@@ -130,6 +129,11 @@ class GemeraldBeanstalk::Tube
   end
 
 
+  def should_deactivate?
+    return @jobs.length == 0 && @stats['watching'] == 0 && @stats['using'] == 0
+  end
+
+
   def stats
     job_stats = @jobs.counts_by_state
     # Need to call paused in advance to update state
@@ -155,6 +159,7 @@ class GemeraldBeanstalk::Tube
 
   def stop_use
     adjust_stats_key('using', -1)
+    deactivate if should_deactivate?
   end
 
 

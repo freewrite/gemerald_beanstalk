@@ -522,6 +522,7 @@ class GemeraldBeanstalk::Beanstalk
 
   def use(connection, tube_name)
     return BAD_FORMAT unless valid_tube_name?(tube_name)
+    tube(connection.tube_used).stop_use
     tube(tube_name, :create_if_missing).use
     connection.use(tube_name)
 
