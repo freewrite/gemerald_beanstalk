@@ -28,7 +28,7 @@ class GemeraldBeanstalk::Beanstalk
 
   STATS_COMMANDS = %w[
     bury delete ignore kick list-tube-used list-tubes list-tubes-watched pause-tube peek peek-buried
-    peek-delayed peek-ready put release reserve stats stats-job stats-tube use watch
+    peek-delayed peek-ready put release reserve reserve-with-timeout stats stats-job stats-tube use watch
   ]
 
   BAD_FORMAT = "BAD_FORMAT\r\n"
@@ -53,6 +53,7 @@ class GemeraldBeanstalk::Beanstalk
   VALID_TUBE_NAME_REGEX = /\A[a-zA-Z0-9_+\/;.$()]{1}[a-zA-Z0-9_\-+\/;.$()]*\z/
 
   attr_reader :address, :max_job_size
+
 
   def connect(connection = nil)
     beanstalk_connection = GemeraldBeanstalk::Connection.new(self, connection)
@@ -426,6 +427,7 @@ class GemeraldBeanstalk::Beanstalk
       'cmd-peek-delayed' => @stats['cmd-peek-delayed'],
       'cmd-peek-buried' => @stats['cmd-peek-buried'],
       'cmd-reserve' => @stats['cmd-reserve'],
+      'cmd-reserve-with-timeout' => @stats['cmd-reserve-with-timeout'],
       'cmd-use' => @stats['cmd-use'],
       'cmd-watch' => @stats['cmd-watch'],
       'cmd-ignore' => @stats['cmd-ignore'],
