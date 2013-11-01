@@ -2,34 +2,52 @@ require 'securerandom'
 require 'socket'
 
 class GemeraldBeanstalk::Beanstalk
-  BEANSTALK_COMMANDS = %w[
-    bury delete ignore kick kick-job list-tubes list-tube-used list-tubes-watched
-    pause-tube peek peek-buried peek-delayed peek-ready put quit release reserve
-    reserve-with-timeout stats stats-job stats-tube touch use watch
+
+  COMMAND_PARSER_REGEX = /(?<command>.*?)(?:\r\n(?<body>.*))?\r\n\z/m
+  TRAILING_SPACE_REGEX = /\s+\z/
+
+  COMMANDS = [
+    :bury, :delete, :ignore, :kick, :'kick-job', :'list-tubes', :'list-tube-used', :'list-tubes-watched',
+    :'pause-tube', :peek, :'peek-buried', :'peek-delayed', :'peek-ready', :put, :quit, :release, :reserve,
+    :'reserve-with-timeout', :stats, :'stats-job', :'stats-tube', :touch, :use, :watch,
   ]
 
-  CONNECTION_PARSER_ACCESSIBLE_COMMANDS = %w[bad_format!]
-
-  ALL_COMMANDS = BEANSTALK_COMMANDS + CONNECTION_PARSER_ACCESSIBLE_COMMANDS
-
-  underscored_method_names = {
-    'kick-job' => 'kick_job', 'list-tubes' => 'list_tubes', 'list-tube-used' => 'list_tube_used',
-    'list-tubes-watched' => 'list_tubes_watched', 'pause-tube' => 'pause_tube', 'peek-buried' => 'peek_buried',
-    'peek-delayed' => 'peek_delayed', 'peek-ready' => 'peek_ready', 'reserve-with-timeout' => 'reserve_with_timeout',
-    'stats-job' => 'stats_job', 'stats-tube' => 'stats_tube',
-  }
-
-  COMMAND_METHOD_NAMES = Hash[ALL_COMMANDS.zip(ALL_COMMANDS)].merge!(underscored_method_names)
-
-  CONNECTION_SPECIFIC_COMMANDS = %w[
-    bury delete ignore kick list-tube-used list-tubes-watched peek-buried peek-delayed
-    peek-ready put quit release reserve reserve-with-timeout touch use watch
+  COMMANDS_BAD_FORMAT_WITH_TRAILING_SPACE = [
+    :bury, :use, :watch,
   ]
 
-  STATS_COMMANDS = %w[
-    bury delete ignore kick list-tube-used list-tubes list-tubes-watched pause-tube peek peek-buried
-    peek-delayed peek-ready put release reserve reserve-with-timeout stats stats-job stats-tube use watch
+  COMMANDS_CONNECTION_SPECIFIC = [
+    :bury, :delete, :ignore, :kick, :'list-tube-used', :'list-tubes-watched', :'peek-buried', :'peek-delayed',
+    :'peek-ready', :put, :quit, :release, :reserve, :'reserve-with-timeout', :touch, :use, :watch
   ]
+
+  COMMAND_METHOD_NAMES = Hash[COMMANDS.zip(COMMANDS)].merge!({
+    :'kick-job' => 'kick_job', :'list-tubes' => 'list_tubes', :'list-tube-used' => 'list_tube_used',
+    :'list-tubes-watched' => :'list_tubes_watched', :'pause-tube' => 'pause_tube', :'peek-buried' => 'peek_buried',
+    :'peek-delayed' => 'peek_delayed', :'peek-ready' => 'peek_ready', :'reserve-with-timeout' => 'reserve_with_timeout',
+    :'stats-job' => 'stats_job', :'stats-tube' => 'stats_tube',
+  })
+
+  COMMANDS_STATS = [
+    :bury, :delete, :ignore, :kick, :'list-tube-used', :'list-tubes', :'list-tubes-watched', :'pause-tube', :peek, :'peek-buried',
+    :'peek-delayed', :'peek-ready', :put, :release, :reserve, :'reserve-with-timeout', :stats, :'stats-job', :'stats-tube', :use, :watch,
+  ]
+
+  COMMANDS_WITHOUT_PARAMS = [
+    :'list-tubes', :'list-tube-used', :'list-tubes-watched', :'peek-buried', :'peek-delayed', :'peek-ready',
+    :quit, :reserve, :stats,
+  ]
+
+  COMMANDS_WITH_PARAMS_NOT_REQUIRING_SPACE = [:'pause-tube', :'reserve-with-timeout']
+
+  COMMANDS_WITH_PARAMS_REQUIRING_SPACE = COMMANDS - COMMANDS_WITHOUT_PARAMS - COMMANDS_WITH_PARAMS_NOT_REQUIRING_SPACE
+
+  COMMANDS_FORMAT_DURING_PARSE = [:put, :'reserve-with-timeout'] + COMMANDS_BAD_FORMAT_WITH_TRAILING_SPACE + COMMANDS_WITHOUT_PARAMS
+
+
+  INVALID_REQUEST = :invalid_request
+  MULTI_PART_REQUEST = :multi_part_request
+  VALID_REQUEST = :valid_request
 
   BAD_FORMAT = "BAD_FORMAT\r\n"
   BURIED = "BURIED\r\n"
@@ -55,6 +73,73 @@ class GemeraldBeanstalk::Beanstalk
   attr_reader :address, :max_job_size
 
 
+  def self.parse_command(raw_command)
+    command_lines = raw_command.match(COMMAND_PARSER_REGEX)
+    return [INVALID_REQUEST, UNKNOWN_COMMAND] if command_lines.nil?
+
+    command_params = command_lines[:command].split(/ /)
+    command = command_params[0] = command_params[0].to_sym rescue nil
+
+    space_after_command = !!(raw_command[command.length] =~ / /) unless command.nil?
+    if space_after_command.nil? || !valid_command?(command, space_after_command)
+      return [INVALID_REQUEST, UNKNOWN_COMMAND].concat(command_params)
+    elsif format_command_during_parse?(command)
+      space_after_line = !!(command_lines[:command] =~ TRAILING_SPACE_REGEX)
+      command_params = format_command(command_params, space_after_command, space_after_line)
+      return command_params if command_params[0] == INVALID_REQUEST
+    end
+
+    if command == :put
+      if (body = command_lines[:body]).nil?
+        return command_params.unshift(MULTI_PART_REQUEST)
+      else
+        command_params.push("#{body}\r\n")
+      end
+    end
+
+    return command_params.unshift(VALID_REQUEST)
+  end
+
+
+  def self.valid_command?(command, includes_trailing_space = false)
+    return true if COMMANDS_WITHOUT_PARAMS.include?(command) ||
+      COMMANDS_WITH_PARAMS_NOT_REQUIRING_SPACE.include?(command) ||
+      COMMANDS_WITH_PARAMS_REQUIRING_SPACE.include?(command) && includes_trailing_space
+    return false
+  end
+
+
+  def self.format_command(command_params, space_after_command, space_after_line)
+    command = command_params[0]
+    bad_format = false
+    if (COMMANDS_WITHOUT_PARAMS.include?(command) && space_after_command) ||
+      (COMMANDS_BAD_FORMAT_WITH_TRAILING_SPACE.include?(command) && space_after_line) ||
+      (command == :'reserve-with-timeout' && !space_after_command)
+
+      bad_format = true
+    else
+      # Format put args now in case it's a multi part put
+      if command == :put
+        (1..4).each do |index|
+          int_param = command_params[index].to_i
+          if int_param.to_s != command_params[index] || int_param < 0
+            bad_format = true
+            break
+          end
+          command_params[index] = command_params[index].to_i
+        end
+      end
+    end
+
+    return bad_format ? [INVALID_REQUEST, BAD_FORMAT].concat(command_params) : command_params
+  end
+
+
+  def self.format_command_during_parse?(command)
+    return COMMANDS_FORMAT_DURING_PARSE.include?(command)
+  end
+
+
   def connect(connection = nil)
     beanstalk_connection = GemeraldBeanstalk::Connection.new(self, connection)
     @connections << beanstalk_connection
@@ -75,13 +160,9 @@ class GemeraldBeanstalk::Beanstalk
 
 
   def execute(connection, command = nil, *command_params)
-    return UNKNOWN_COMMAND unless valid_command?(command)
-
-    adjust_stats_key("cmd-#{command}") if STATS_COMMANDS.include?(command)
+    adjust_stats_key("cmd-#{command}") if COMMANDS_STATS.include?(command)
 
     command_params.unshift(connection) if connection_specific_command?(command)
-
-    return BAD_FORMAT if COMMAND_METHOD_PARAMETER_COUNTS[command] != command_params.length
 
     return send(COMMAND_METHOD_NAMES[command], *command_params)
   end
@@ -158,12 +239,9 @@ class GemeraldBeanstalk::Beanstalk
   end
 
 
-  def bad_format!
-    return BAD_FORMAT
-  end
+  def bury(connection, job_id, priority, *args)
+    return BAD_FORMAT unless valid_int_string?(job_id) && valid_int_string?(priority) && priority.to_i >= 0 && args.empty?
 
-
-  def bury(connection, job_id, priority)
     job = find_job(job_id, :only => JOB_RESERVED_STATES)
     return NOT_FOUND if job.nil? || !job.bury(connection, priority)
 
@@ -181,7 +259,7 @@ class GemeraldBeanstalk::Beanstalk
 
 
   def connection_specific_command?(command)
-    return CONNECTION_SPECIFIC_COMMANDS.include?(command)
+    return COMMANDS_CONNECTION_SPECIFIC.include?(command)
   end
 
 
@@ -190,7 +268,8 @@ class GemeraldBeanstalk::Beanstalk
   end
 
 
-  def delete(connection, job_id)
+  def delete(connection, job_id = nil, *args)
+    job_id = job_id.to_i
     job = find_job(job_id)
     return NOT_FOUND if job.nil? || !job.delete(connection)
 
@@ -365,13 +444,14 @@ class GemeraldBeanstalk::Beanstalk
   end
 
 
-  def reserve(connection)
+  def reserve(connection, *args)
+    return BAD_FORMAT unless args.empty?
     reserve_job(connection)
     return nil
   end
 
 
-  def reserve_job(connection, timeout = nil)
+  def reserve_job(connection, timeout = 0)
     connection.worker = true
 
     if deadline_pending?(connection)
@@ -382,7 +462,7 @@ class GemeraldBeanstalk::Beanstalk
     connection.tubes_watched.each do |tube_name|
       tube(tube_name).reserve(connection)
     end
-    connection.wait([nil, 0].include?(timeout) ? nil : Time.now.to_f + timeout)
+    connection.wait(timeout <= 0 ? nil : Time.now.to_f + timeout)
 
     dispatched = false
     while !dispatched
@@ -394,9 +474,9 @@ class GemeraldBeanstalk::Beanstalk
   end
 
 
-  def reserve_with_timeout(connection, timeout)
+  def reserve_with_timeout(connection, timeout = 0, *args)
     timeout = timeout.to_i
-    return nil if reserve_job(connection, timeout) || timeout > 0
+    return nil if reserve_job(connection, timeout) || timeout != 0
     connection.wait_timed_out
     return TIMED_OUT
   end
@@ -531,8 +611,8 @@ class GemeraldBeanstalk::Beanstalk
   end
 
 
-  def valid_command?(command)
-    return ALL_COMMANDS.include?(command)
+  def valid_int_string?(int)
+    return int.to_i.to_s == int
   end
 
 
@@ -559,7 +639,5 @@ class GemeraldBeanstalk::Beanstalk
     response = %w[---].concat(data).join("\n")
     return "OK #{response.bytesize}\r\n#{response}\r\n"
   end
-
-  COMMAND_METHOD_PARAMETER_COUNTS = Hash[ALL_COMMANDS.map {|command| [command, instance_method(COMMAND_METHOD_NAMES[command]).parameters.length] }]
 
 end
