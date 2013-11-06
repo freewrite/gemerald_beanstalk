@@ -51,7 +51,7 @@ class GemeraldBeanstalk::Connection
       if multi_part_request_in_progress?
         parsed_command = @multi_part_request.push(raw_command)
       else
-        parsed_command = GemeraldBeanstalk::Beanstalk.parse_command(raw_command)
+        parsed_command = beanstalk.parse_command(raw_command)
         case parsed_command.shift
         when INVALID_REQUEST
           response = parsed_command.shift
