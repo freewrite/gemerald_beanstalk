@@ -9,7 +9,7 @@ class GemeraldBeanstalk::Tube
 
 
   def adjust_stats_key(key, adjustment = 1)
-    return @stats[key] += adjustment
+    @stats[key] = [@stats[key] + adjustment, 0].max
   end
 
 

@@ -18,12 +18,15 @@ class UseTest < BeanstalkIntegrationTest
     end
 
 
-    should 'increment the current-using counter on the tube stats' do
+    should 'increment/decrement the current-using counter on the tube stats' do
       client.transmit("use #{tube_name}")
       initial_using_count = client.transmit("stats-tube #{tube_name}")[:body]['current-using'].to_i
       assert_equal 1, initial_using_count
-      build_client.transmit("use #{tube_name}")
+      other_client = build_client
+      other_client.transmit("use #{tube_name}")
       assert_equal initial_using_count + 1, client.transmit("stats-tube #{tube_name}")[:body]['current-using'].to_i
+      other_client.transmit("use #{uuid}")
+      assert_equal initial_using_count, client.transmit("stats-tube #{tube_name}")[:body]['current-using'].to_i
     end
 
 

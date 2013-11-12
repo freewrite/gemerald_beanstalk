@@ -14,10 +14,13 @@ class ReleaseTest < BeanstalkIntegrationTest
       end
       stats = client.transmit('stats')[:body]
       @initial_cmd_release = stats['cmd-release']
+      @initial_server_jobs_urgent = stats['current-jobs-urgent']
       @initial_server_jobs_ready = stats['current-jobs-ready']
       @initial_server_jobs_delayed = stats['current-jobs-delayed']
-      @initial_tube_jobs_ready = client.transmit("stats-tube #{tube_name}")[:body]['current-jobs-ready']
-      @initial_tube_jobs_delayed = client.transmit("stats-tube #{tube_name}")[:body]['current-jobs-delayed']
+      tube_stats = client.transmit("stats-tube #{tube_name}")[:body]
+      @initial_tube_jobs_urgent = tube_stats['current-jobs-urgent']
+      @initial_tube_jobs_ready = tube_stats['current-jobs-ready']
+      @initial_tube_jobs_delayed = tube_stats['current-jobs-delayed']
       @initial_job_releases = client.transmit("stats-job #{@reserved_id}")[:body]['releases']
     end
 
@@ -177,10 +180,17 @@ class ReleaseTest < BeanstalkIntegrationTest
 
   def assert_counter_delta(delta = 1, job_state = 'ready')
     stats = client.transmit('stats')[:body]
+    tube_stats = client.transmit("stats-tube #{tube_name}")[:body]
     assert_equal(@initial_cmd_release + delta, stats['cmd-release'], 'Expected cmd-release to be incremented')
     assert_equal(instance_variable_get("@initial_server_jobs_#{job_state}") + delta, stats["current-jobs-#{job_state}"], "Expected server current-jobs-#{job_state} to be incremented")
-    assert_equal(instance_variable_get("@initial_tube_jobs_#{job_state}") + delta, client.transmit("stats-tube #{tube_name}")[:body]["current-jobs-#{job_state}"], "Expected tube current-jobs-#{job_state} to be incremented")
+    assert_equal(instance_variable_get("@initial_tube_jobs_#{job_state}") + delta, tube_stats["current-jobs-#{job_state}"], "Expected tube current-jobs-#{job_state} to be incremented")
+    if job_state == 'ready'
+      assert_equal(@initial_server_jobs_urgent + delta, stats['current-jobs-urgent'], 'Expected server current-jobs-urgent to be incremented')
+      assert_equal(@initial_tube_jobs_urgent + delta, tube_stats['current-jobs-urgent'], 'Expected tube current-jobs-urgent to be incremented')
+    end
     assert_equal(@initial_job_releases + delta, client.transmit("stats-job #{@reserved_id}")[:body]['releases'], 'Expected job releases to be incremented')
+    assert_equal(0, stats['current-jobs-reserved'], 'Expected server current-jobs-reserved to be zero')
+    assert_equal(0, tube_stats['current-jobs-reserved'], 'Expected tube current-jobs-reserved to be zero')
   end
 
 end

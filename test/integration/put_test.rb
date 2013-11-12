@@ -13,8 +13,14 @@ class PutTest < BeanstalkIntegrationTest
     should "insert a job into the connection's currently used tube" do
       assert_equal tube_name, client.transmit('list-tube-used')[:id]
 
+      stats = client.transmit('stats')[:body]
+      initial_current_producers = stats['current-producers']
+      initial_cmd_put = stats['cmd-put']
       response = client.transmit("put 1 0 120 #{@message.bytesize}\r\n#{@message}")
       job_tube = client.transmit("stats-job #{response[:id]}")[:body]['tube']
+      stats = client.transmit('stats')[:body]
+      assert_equal initial_cmd_put + 1, stats['cmd-put']
+      assert_equal initial_current_producers + 1, stats['current-producers']
       assert_equal tube_name, job_tube
     end
 
@@ -59,6 +65,9 @@ class PutTest < BeanstalkIntegrationTest
 
       assert_equal delay, job_stats['delay']
       assert_equal 'delayed', job_stats['state']
+      sleep 1
+      time_left = client.transmit("stats-job #{response[:id]}")[:body]['time-left']
+      assert(time_left < job_stats['time-left'], 'Expected time-left to decrement after a second')
     end
 
 
@@ -68,8 +77,14 @@ class PutTest < BeanstalkIntegrationTest
       response = client.transmit("put 0 #{delay} 10 #{@message.bytesize}\r\n#{@message}")
       sleep 1
       job_stats = client.transmit("stats-job #{response[:id]}")[:body]
-
       assert_equal 'ready', job_stats['state']
+
+      stats = client.transmit('stats')[:body]
+      tube_stats = client.transmit("stats-tube #{tube_name}")[:body]
+      assert_equal(1, stats['current-jobs-urgent'])
+      assert_equal(1, stats['current-jobs-ready'])
+      assert_equal(1, tube_stats['current-jobs-urgent'])
+      assert_equal(1, tube_stats['current-jobs-ready'])
     end
 
 
@@ -124,6 +139,26 @@ class PutTest < BeanstalkIntegrationTest
         client.transmit("put 0 0 10 #{@message.bytesize - 1}\r\n#{@message}")
       end
       assert_equal stats['cmd-put'] + 1, build_client.transmit('stats')[:body]['cmd-put']
+    end
+
+
+    should 'should be able to handle job of max-job-size' do
+      stats = client.transmit('stats')[:body]
+      max_job_size = stats['max-job-size']
+      dec_mod = max_job_size % 10
+      message = SecureRandom.base64(8)[0, 10] * ((max_job_size - dec_mod) / 10)
+      message += SecureRandom.base64(dec_mod)[0, dec_mod]
+
+      response = nil
+      begin
+        response = client.transmit("put 123 0 10 #{message.bytesize}\r\n#{message}")
+      rescue Beaneater::JobTooBigError => e
+        puts 'Either max-job-size is incorrect or server cannot handle max job size'
+        raise e
+      end
+      assert_equal 'INSERTED', response[:status]
+      assert_equal stats['cmd-put'] + 1, client.transmit('stats')[:body]['cmd-put']
+      assert_equal message, client.transmit("peek #{response[:id]}")[:body]
     end
 
 

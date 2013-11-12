@@ -34,17 +34,18 @@ class GemeraldBeanstalk::Beanstalk
     :quit, :reserve, :stats,
   ]
 
-  COMMANDS_WITH_PARAMS_NOT_REQUIRING_SPACE = [:'pause-tube', :'reserve-with-timeout']
+  COMMANDS_WITH_PARAMS_NOT_REQUIRING_SPACE = [:'pause-tube', :'reserve-with-timeout', :'stats-job', :'stats-tube']
+
+  COMMANDS_WITH_PARAMS_BAD_FORMAT_WITHOUT_SPACE = [:'reserve-with-timeout', :'stats-job', :'stats-tube']
 
   COMMANDS_WITH_PARAMS_REQUIRING_SPACE = COMMANDS - COMMANDS_WITHOUT_PARAMS - COMMANDS_WITH_PARAMS_NOT_REQUIRING_SPACE
 
-  COMMANDS_BAD_FORMAT_WITH_TRAILING_SPACE = [
-    :bury, :ignore, :put, :release, :use, :watch,
-  ]
+  COMMANDS_BAD_FORMAT_WITH_TRAILING_SPACE = [:bury, :ignore, :'pause-tube', :put, :release, :'stats-tube', :use, :watch]
 
-  COMMANDS_REQUIRE_VALID_TUBE_NAME = [:ignore, :use, :watch]
+  COMMANDS_REQUIRE_VALID_TUBE_NAME = [:ignore, :'pause-tube', :'stats-tube', :use, :watch]
 
-  COMMANDS_FORMAT_DURING_PARSE = [:kick, :put, :'reserve-with-timeout'] + COMMANDS_BAD_FORMAT_WITH_TRAILING_SPACE + COMMANDS_WITHOUT_PARAMS + COMMANDS_REQUIRE_VALID_TUBE_NAME
+  COMMANDS_FORMAT_DURING_PARSE = [:kick, :put, :'reserve-with-timeout'] + COMMANDS_BAD_FORMAT_WITH_TRAILING_SPACE +
+    COMMANDS_WITHOUT_PARAMS + COMMANDS_REQUIRE_VALID_TUBE_NAME + COMMANDS_WITH_PARAMS_BAD_FORMAT_WITHOUT_SPACE
 
 
   INVALID_REQUEST = :invalid_request
@@ -121,7 +122,7 @@ class GemeraldBeanstalk::Beanstalk
     bad_format = false
     if (COMMANDS_WITHOUT_PARAMS.include?(command) && (space_after_command || command_params.length > 1)) ||
       COMMANDS_REQUIRE_VALID_TUBE_NAME.include?(command) && !valid_tube_name?(command_params[1]) ||
-      (command == :'reserve-with-timeout' && !space_after_command)
+      (COMMANDS_WITH_PARAMS_BAD_FORMAT_WITHOUT_SPACE.include?(command) && !space_after_command)
 
       bad_format = true
     elsif (COMMANDS_BAD_FORMAT_WITH_TRAILING_SPACE.include?(command) && space_after_line)
@@ -149,6 +150,8 @@ class GemeraldBeanstalk::Beanstalk
       bad_format = true unless command_params.length == 2
     elsif command == :kick
       bad_format = true if command_params[1].nil? || command_params[1].to_i == 0 && command_params[1][0] != '0'
+    elsif command == :'pause-tube'
+      bad_format = true if command_params[1].nil? || command_params[2].nil? || !valid_int_string?(command_params[2])
     end
 
     return bad_format ? [INVALID_REQUEST, BAD_FORMAT].concat(command_params) : command_params
@@ -170,6 +173,10 @@ class GemeraldBeanstalk::Beanstalk
 
   def disconnect(connection)
     tube(connection.tube_used).stop_use
+    connection.tubes_watched.dup.each do |watched_tube|
+      tube(watched_tube).ignore
+      connection.ignore(watched_tube, :force)
+    end
     @reserved[connection].each do |job|
       job.release(connection, job.priority, 0, false)
     end
@@ -227,10 +234,13 @@ class GemeraldBeanstalk::Beanstalk
     end
     @reserved.values.flatten.each(&:state)
     @delayed.keep_if do |job|
-      if job.delayed?
+      case job.state
+      when :delayed
         true
-      else
+      when :ready
         honor_reservations(job)
+        false
+      else
         false
       end
     end
@@ -289,11 +299,14 @@ class GemeraldBeanstalk::Beanstalk
   def delete(connection, job_id = nil, *args)
     job_id = job_id.to_i
     job = find_job(job_id)
-    return NOT_FOUND if job.nil? || !job.delete(connection)
+    return NOT_FOUND if job.nil?
+
+    original_state = job.state
+    return NOT_FOUND unless job.delete(connection)
 
     tube(job.tube_name).delete(job)
     @jobs[job.id - 1] = nil
-    @reserved[connection].delete(job) if JOB_RESERVED_STATES.include?(job.state)
+    @reserved[connection].delete(job) if JOB_RESERVED_STATES.include?(original_state)
 
     return DELETED
   end
@@ -351,7 +364,8 @@ class GemeraldBeanstalk::Beanstalk
   end
 
 
-  def kick_job(job_id)
+  def kick_job(job_id = nil, *args)
+    job_id = job_id.to_i
     job = find_job(job_id, :only => JOB_INACTIVE_STATES)
     return (!job.nil? && job.kick) ? KICKED : NOT_FOUND
   end
@@ -529,11 +543,11 @@ class GemeraldBeanstalk::Beanstalk
       'cmd-peek-buried' => @stats['cmd-peek-buried'],
       'cmd-reserve' => @stats['cmd-reserve'],
       'cmd-reserve-with-timeout' => @stats['cmd-reserve-with-timeout'],
+      'cmd-delete' => @stats['cmd-delete'],
+      'cmd-release' => @stats['cmd-release'],
       'cmd-use' => @stats['cmd-use'],
       'cmd-watch' => @stats['cmd-watch'],
       'cmd-ignore' => @stats['cmd-ignore'],
-      'cmd-delete' => @stats['cmd-delete'],
-      'cmd-release' => @stats['cmd-release'],
       'cmd-bury' => @stats['cmd-bury'],
       'cmd-kick' => @stats['cmd-kick'],
       'cmd-touch' => @stats['cmd-touch'],
@@ -555,13 +569,13 @@ class GemeraldBeanstalk::Beanstalk
       'total-connections' => @stats['total-connections'],
       'pid' => Process.pid,
       'version' => GemeraldBeanstalk::VERSION,
-      'rusage-utime' =>'',
-      'rusage-stime' =>'',
+      'rusage-utime' => 0,
+      'rusage-stime' => 0,
       'uptime' => (Time.now.to_f - @up_at).to_i,
       'binlog-oldest-index' => 0,
       'binlog-current-index' => 0,
-      'binlog-records-written' => 0,
       'binlog-records-migrated' => 0,
+      'binlog-records-written' => 0,
       'binlog-max-size' => 10485760,
       'id' => @id,
       'hostname' => Socket.gethostname,
@@ -570,7 +584,8 @@ class GemeraldBeanstalk::Beanstalk
   end
 
 
-  def stats_job(job_id)
+  def stats_job(job_id = nil, *args)
+    job_id = job_id.to_i
     job = find_job(job_id)
     return NOT_FOUND if job.nil?
 
@@ -643,8 +658,12 @@ class GemeraldBeanstalk::Beanstalk
 
 
   def watch(connection, tube_name)
-    tube(tube_name, :create_if_missing).watch
-    watched_count = connection.watch(tube_name)
+    if connection.tubes_watched.include?(tube_name)
+      watched_count = connection.tubes_watched.length
+    else
+      tube(tube_name, :create_if_missing).watch
+      watched_count = connection.watch(tube_name)
+    end
 
     return "WATCHING #{watched_count}\r\n"
   end

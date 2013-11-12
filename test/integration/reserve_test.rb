@@ -32,13 +32,16 @@ class ReserveTest < BeanstalkIntegrationTest
           end
 
 
-          should "increment reserves count on job, current-jobs-reserved on tube, and current-jobs-reserved and cmd-#{command} on server" do
-            job_id = client.transmit("put 0 0 60 #{@message.bytesize}\r\n#{@message}")[:id]
+          should "increment reserves count on job, current-jobs-reserved on tube, and current-jobs-reserved, current-producers, and cmd-#{command} on server" do
+            other_client = build_client
+            other_client.transmit("use #{tube_name}")
+            job_id = other_client.transmit("put 0 0 60 #{@message.bytesize}\r\n#{@message}")[:id]
             initial_job_reserves = client.transmit("stats-job #{job_id}")[:body]['reserves']
             initial_tube_reserved = client.transmit("stats-tube #{tube_name}")[:body]['current-jobs-reserved']
             server_stats = client.transmit('stats')[:body]
             initial_server_reserved = server_stats['current-jobs-reserved']
             initial_server_cmds = server_stats["cmd-#{command}"]
+            initial_server_workers = server_stats['current-workers']
 
             timeout(2) do
               client.transmit(reserve_command)[:id]
@@ -49,6 +52,7 @@ class ReserveTest < BeanstalkIntegrationTest
             server_stats = client.transmit('stats')[:body]
             assert_equal initial_server_reserved + 1, server_stats['current-jobs-reserved']
             assert_equal initial_server_cmds + 1, server_stats["cmd-#{command}"]
+            assert_equal initial_server_workers + 1, server_stats['current-workers']
             client.transmit("delete #{job_id}")
           end
 
@@ -64,6 +68,7 @@ class ReserveTest < BeanstalkIntegrationTest
                 assert reservation_id
                 client.transmit("delete #{reservation_id}")
               end
+              assert_equal 0, client.transmit("stats-tube #{tube_name}")[:body]['current-waiting']
             end
             while client2.transmit("stats-tube #{tube_name}")[:body]['current-waiting'] == 0
               sleep 0.1
@@ -90,11 +95,9 @@ class ReserveTest < BeanstalkIntegrationTest
 
 
           should 'reserve the job received first if priorities equal' do
-            job_ids = []
-            job_ids << client.transmit("put 0 0 60 #{@message.bytesize}\r\n#{@message}")[:id]
-            job_ids << client.transmit("put 0 0 60 #{@message.bytesize}\r\n#{@message}")[:id]
-            job_ids << client.transmit("put 0 0 60 #{@message.bytesize}\r\n#{@message}")[:id]
-            job_ids << client.transmit("put 0 0 60 #{@message.bytesize}\r\n#{@message}")[:id]
+            job_ids = 4.times.map do
+              client.transmit("put 0 0 60 #{@message.bytesize}\r\n#{@message}")[:id]
+            end
             job_ids.length.times do
               timeout(2) do
                 job_id = job_ids.shift

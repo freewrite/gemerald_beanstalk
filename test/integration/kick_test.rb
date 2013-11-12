@@ -204,17 +204,4 @@ class KickTest < BeanstalkIntegrationTest
 
   end
 
-  def create_buried_jobs(buried_count = 5)
-    job_ids = []
-    buried_count.times do
-      message = uuid
-      client.transmit("put 0 0 120 #{message.bytesize}\r\n#{message}")
-      timeout(1) do
-        job_ids << client.transmit('reserve')[:id]
-      end
-      client.transmit("bury #{job_ids.last} 0")
-    end
-    return job_ids
-  end
-
 end

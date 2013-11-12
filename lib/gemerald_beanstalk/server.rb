@@ -5,13 +5,15 @@ module GemeraldBeanstalk::Server
   def self.start(bind_address = nil, port = nil)
     bind_address ||= '0.0.0.0'
     port ||= 11300
-    beanstalk = GemeraldBeanstalk::Beanstalk.new("#{bind_address}:#{port}")
+    full_address = "#{bind_address}:#{port}"
+    beanstalk = GemeraldBeanstalk::Beanstalk.new(full_address)
     thread = Thread.new do
       EventMachine.run do
         EventMachine.start_server(bind_address, port, GemeraldBeanstalk::Server, beanstalk)
         EventMachine.add_periodic_timer(0.01, beanstalk.method(:update_state))
       end
     end
+    $0 = "gemerald_beanstalk:#{full_address}"
     return [thread, beanstalk]
   end
 

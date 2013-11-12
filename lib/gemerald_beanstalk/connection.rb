@@ -68,8 +68,8 @@ class GemeraldBeanstalk::Connection
   end
 
 
-  def ignore(tube)
-    return nil if @tubes_watched.length == 1
+  def ignore(tube, force = false)
+    return nil unless @tubes_watched.length > 1 || force
     @tubes_watched.delete(tube)
     return @tubes_watched.length
   end

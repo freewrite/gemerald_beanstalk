@@ -47,14 +47,19 @@ class TouchTest < BeanstalkIntegrationTest
 
 
     should 'not allow touching jobs that are not reserved' do
-      initial_cmd_touch = client.transmit('stats')[:body]['cmd-touch']
-      do_setup(10)
-      client.transmit("release #{@reserved_id} 0 0")
+      stats = client.transmit('stats')[:body]
+      initial_cmd_touch = stats['cmd-touch']
+      initial_job_timeouts = stats['job-timeouts']
+      do_setup(1)
+      sleep 1
       assert_raises(Beaneater::NotFoundError, 'Expected touching an unreserved job to return NOT_FOUND') do
         build_client.transmit("touch #{@reserved_id}")
       end
+      assert_equal(1, client.transmit("stats-job #{@reserved_id}")[:body]['timeouts'], 'Expected job timeouts to be incremented')
       client.transmit("delete #{@reserved_id}")
-      assert_equal(initial_cmd_touch + 1, client.transmit('stats')[:body]['cmd-touch'], 'Expected cmd-touch to be incremented')
+      stats = client.transmit('stats')[:body]
+      assert_equal(initial_cmd_touch + 1, stats['cmd-touch'], 'Expected cmd-touch to be incremented')
+      assert_equal(initial_job_timeouts + 1, stats['job-timeouts'], 'Expected job-timeouts to be incremented')
     end
 
 
