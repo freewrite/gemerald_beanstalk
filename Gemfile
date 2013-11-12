@@ -3,8 +3,6 @@ source 'https://rubygems.org'
 gemspec
 
 group :test do
-  gem 'beaneater'
+  gem 'beanstalk_integration_tests'
   gem 'coveralls', :require => false
-  gem 'debugger', :platform => [:mri_19, :mri_20]
-  gem 'mocha', :require => false
 end
