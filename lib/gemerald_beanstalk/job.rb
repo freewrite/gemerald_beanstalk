@@ -171,6 +171,11 @@ class GemeraldBeanstalk::Job
   def stats
     now = Time.now.to_f
     current_state = state
+    if self.timeout_at
+      time_left = (self.timeout_at - now).to_i
+    elsif self.ready_at
+      time_left = (self.ready_at - now).to_i
+    end
     return {
       'id' => self.id,
       'tube' => self.tube_name,
@@ -179,7 +184,7 @@ class GemeraldBeanstalk::Job
       'age' => (now - self.created_at).to_i,
       'delay' => self.delay || 0,
       'ttr' => self.ttr,
-      'time-left' => self.timeout_at ? (self.timeout_at - now).to_i : 0,
+      'time-left' => time_left || 0,
       'file' => 0,
       'reserves' => @stats_hash['reserves'],
       'timeouts' => @stats_hash['timeouts'],
