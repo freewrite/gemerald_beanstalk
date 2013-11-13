@@ -13,7 +13,7 @@ module GemeraldBeanstalk::Server
         EventMachine.add_periodic_timer(0.01, beanstalk.method(:update_state))
       end
     end
-    $0 = "gemerald_beanstalk:#{full_address}"
+    $PROGRAM_NAME = "gemerald_beanstalk:#{full_address}"
     return [thread, beanstalk]
   end
 

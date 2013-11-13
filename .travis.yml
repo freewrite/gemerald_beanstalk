@@ -8,7 +8,7 @@ rvm:
 
 before_script:
   - bundle config
-  - rake start_test_server &
+  - rake start_gemerald_beanstalk_test_server &
   - git clone https://github.com/beanstalkd/beaneater.git /tmp/beaneater
   - BUNDLE_GEMFILE=/tmp/beaneater/Gemfile bundle install
   - git clone https://github.com/nesquena/backburner.git /tmp/backburner
@@ -17,9 +17,9 @@ before_script:
 script:
   - rake test
   - cd /tmp/beaneater
-  - CI='' BUNDLE_GEMFILE=/tmp/beaneater/Gemfile bundle exec rake test:full
+  - BUNDLE_GEMFILE=/tmp/beaneater/Gemfile bundle exec rake test:full
   - cd /tmp/backburner
-  - CI='' BUNDLE_GEMFILE=/tmp/backburner/Gemfile bundle exec rake
+  - BUNDLE_GEMFILE=/tmp/backburner/Gemfile bundle exec rake
 
 matrix:
   allow_failures:

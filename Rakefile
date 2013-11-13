@@ -6,7 +6,7 @@ Rake::TestTask.new do |t|
   t.pattern = 'test/**/*_test.rb'
 end
 
-task :start_test_server do
+task :start_gemerald_beanstalk_test_server do
   require 'gemerald_beanstalk'
 
   Thread.abort_on_exception = true
