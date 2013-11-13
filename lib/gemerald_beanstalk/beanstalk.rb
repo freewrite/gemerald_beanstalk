@@ -366,9 +366,6 @@ class GemeraldBeanstalk::Beanstalk
 
 
   def put(connection, priority, delay, ttr, bytes, body)
-    priority = priority.to_i
-    delay = delay.to_i
-    ttr = ttr.to_i
     bytes = bytes.to_i
     return JOB_TOO_BIG if bytes > @max_job_size
     return EXPECTED_CRLF if body.length - 2 != bytes || body.slice!(-2, 2) != CRLF
@@ -376,10 +373,8 @@ class GemeraldBeanstalk::Beanstalk
     id = job = tube = nil
     @mutex.synchronize do
       id = @jobs.total_jobs + 1
-      job = GemeraldBeanstalk::Job.new(self, id, connection.tube_used, priority, delay, ttr, bytes, body)
-      @jobs.enqueue(job)
-      tube = tube(connection.tube_used)
-      tube.put(job)
+      job = @jobs.enqueue_new(self, id, connection.tube_used, priority.to_i, delay.to_i, ttr.to_i, bytes, body)
+      tube(connection.tube_used).put(job)
     end
     connection.producer = true
 

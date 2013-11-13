@@ -108,7 +108,7 @@ class GemeraldBeanstalk::Tube
 
 
   def put(job)
-    @jobs.enqueue(job)
+    @jobs.enqueue_existing(job)
   end
 
 
