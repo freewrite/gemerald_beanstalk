@@ -5,6 +5,8 @@ class GemeraldBeanstalk::Beanstalk
 
   COMMAND_PARSER_REGEX = /(?<command>.*?)(?:\r\n(?<body>.*))?\r\n\z/m
   TRAILING_SPACE_REGEX = /\s+\z/
+  WHITE_SPACE_REGEX = / /
+  ZERO_STRING_REGEX = /^0+[^1-9]*/
 
   COMMANDS = [
     :bury, :delete, :ignore, :kick, :'kick-job', :'list-tubes', :'list-tube-used', :'list-tubes-watched',
@@ -130,23 +132,24 @@ class GemeraldBeanstalk::Beanstalk
     command_lines = raw_command.match(COMMAND_PARSER_REGEX)
     return [INVALID_REQUEST, UNKNOWN_COMMAND] if command_lines.nil?
 
-    command_params = command_lines[:command].split(/ /)
+    command_params = command_lines[:command].split(WHITE_SPACE_REGEX)
     command = command_params[0] = command_params[0].to_sym rescue nil
 
-    space_after_command = !!(raw_command[command.length] =~ / /) unless command.nil?
-    if space_after_command.nil? || !valid_command?(command, space_after_command)
+    space_after_command = !command.nil? && !!(raw_command[command.length] =~ WHITE_SPACE_REGEX)
+    if !valid_command?(command, space_after_command)
       return [INVALID_REQUEST, UNKNOWN_COMMAND].concat(command_params)
     elsif format_command_during_parse?(command)
       space_after_line = !!(command_lines[:command] =~ TRAILING_SPACE_REGEX)
-      command_params = format_command(command_params, space_after_command, space_after_line)
-      return command_params if command_params[0] == INVALID_REQUEST
+      unless valid_format?(command_params[0], command_params, space_after_command, space_after_line)
+        return [INVALID_REQUEST, BAD_FORMAT].concat(command_params)
+      end
     end
 
     if command == :put
-      if (body = command_lines[:body]).nil?
+      if command_lines[:body].nil?
         return command_params.unshift(MULTI_PART_REQUEST)
       else
-        command_params.push("#{body}\r\n")
+        command_params.push("#{command_lines[:body]}\r\n")
       end
     end
 
@@ -197,6 +200,22 @@ class GemeraldBeanstalk::Beanstalk
   end
 
 
+  def connection_stats
+    conn_stats = {
+      'current-producers' => 0,
+      'current-waiting' => 0,
+      'current-workers' => 0,
+    }
+    @connections.each do |connection|
+      conn_stats['current-producers'] += 1 if connection.producer?
+      conn_stats['current-waiting'] += 1 if connection.waiting?
+      conn_stats['current-workers'] += 1 if connection.worker?
+    end
+    conn_stats['current-connections'] = @connections.length
+    return conn_stats
+  end
+
+
   def deadline_pending?(connection)
     return @reserved[connection].any?(&:deadline_pending?)
   end
@@ -226,47 +245,6 @@ class GemeraldBeanstalk::Beanstalk
 
     return nil if job.nil? || except.include?(job.state)
     return (only.empty? || only.include?(job.state)) ? job : nil
-  end
-
-
-  def format_command(command_params, space_after_command, space_after_line)
-    command = command_params[0]
-    bad_format = false
-    if (COMMANDS_WITHOUT_PARAMS.include?(command) && (space_after_command || command_params.length > 1)) ||
-      COMMANDS_REQUIRE_VALID_TUBE_NAME.include?(command) && !valid_tube_name?(command_params[1]) ||
-      (COMMANDS_WITH_PARAMS_BAD_FORMAT_WITHOUT_SPACE.include?(command) && !space_after_command)
-
-      bad_format = true
-    elsif (COMMANDS_BAD_FORMAT_WITH_TRAILING_SPACE.include?(command) && space_after_line)
-      adjust_stats_key('cmd-put') if command_params[0] == :put
-      bad_format = true
-    elsif command == :put
-      (1..4).each do |index|
-        int_param = command_params[index].to_i
-        if int_param.to_s != command_params[index] || int_param < 0
-          bad_format = true
-          break
-        end
-        command_params[index] = command_params[index].to_i
-      end
-    elsif command == :bury
-      bad_format = true unless command_params.length == 3 &&
-        valid_int_string?(command_params[1]) &&
-        valid_int_string?(command_params[2]) && command_params[2].to_i >= 0
-    elsif command == :release
-      bad_format = true unless command_params.length == 4 &&
-        valid_int_string?(command_params[1]) &&
-        valid_int_string?(command_params[2]) && command_params[2].to_i >= 0 &&
-        valid_int_string?(command_params[3]) && command_params[3].to_i >= 0
-    elsif command == :ignore
-      bad_format = true unless command_params.length == 2
-    elsif command == :kick
-      bad_format = true if command_params[1].nil? || command_params[1].to_i == 0 && command_params[1][0] != '0'
-    elsif command == :'pause-tube'
-      bad_format = true if command_params[1].nil? || command_params[2].nil? || !valid_int_string?(command_params[2])
-    end
-
-    return bad_format ? [INVALID_REQUEST, BAD_FORMAT].concat(command_params) : command_params
   end
 
 
@@ -388,6 +366,9 @@ class GemeraldBeanstalk::Beanstalk
 
 
   def put(connection, priority, delay, ttr, bytes, body)
+    priority = priority.to_i
+    delay = delay.to_i
+    ttr = ttr.to_i
     bytes = bytes.to_i
     return JOB_TOO_BIG if bytes > @max_job_size
     return EXPECTED_CRLF if body.length - 2 != bytes || body.slice!(-2, 2) != CRLF
@@ -470,17 +451,7 @@ class GemeraldBeanstalk::Beanstalk
 
   def stats
     job_stats = @jobs.counts_by_state
-    connection_stats = {
-      'current-producers' => 0,
-      'current-waiting' => 0,
-      'current-workers' => 0,
-    }
-    @connections.each do |connection|
-      connection_stats['current-producers'] += 1 if connection.producer?
-      connection_stats['current-waiting'] += 1 if connection.waiting?
-      connection_stats['current-workers'] += 1 if connection.worker?
-    end
-    connection_stats['current-connections'] = @connections.length
+    conn_stats = connection_stats
     stats = {
       'current-jobs-urgent' => job_stats['current-jobs-urgent'],
       'current-jobs-ready' => job_stats['current-jobs-ready'],
@@ -513,10 +484,10 @@ class GemeraldBeanstalk::Beanstalk
       'total-jobs' => @jobs.total_jobs,
       'max-job-size' => @max_job_size,
       'current-tubes' => active_tubes.length,
-      'current-connections' => connection_stats['current-connections'],
-      'current-producers' => connection_stats['current-producers'],
-      'current-workers' => connection_stats['current-workers'],
-      'current-waiting' => connection_stats['current-waiting'],
+      'current-connections' => conn_stats['current-connections'],
+      'current-producers' => conn_stats['current-producers'],
+      'current-workers' => conn_stats['current-workers'],
+      'current-waiting' => conn_stats['current-waiting'],
       'total-connections' => @stats['total-connections'],
       'pid' => Process.pid,
       'version' => GemeraldBeanstalk::VERSION,
@@ -595,9 +566,10 @@ class GemeraldBeanstalk::Beanstalk
         message_for_connection = DEADLINE_SOON
       elsif connection.timed_out?
         message_for_connection = TIMED_OUT
+      else
+        next
       end
 
-      next if message_for_connection.nil?
       cancel_reservations(connection)
       connection.transmit(message_for_connection)
     end
@@ -641,8 +613,49 @@ class GemeraldBeanstalk::Beanstalk
   end
 
 
-  def valid_int_string?(int)
-    return int.to_i.to_s == int
+  def valid_format?(command, command_params, space_after_command, space_after_line)
+    if COMMANDS_WITHOUT_PARAMS.include?(command) && (space_after_command || command_params.length > 1)
+      return false
+    elsif COMMANDS_REQUIRE_VALID_TUBE_NAME.include?(command) && !valid_tube_name?(command_params[1])
+      return false
+    elsif COMMANDS_WITH_PARAMS_BAD_FORMAT_WITHOUT_SPACE.include?(command) && !space_after_command
+      return false
+    elsif COMMANDS_BAD_FORMAT_WITH_TRAILING_SPACE.include?(command) && space_after_line
+      adjust_stats_key('cmd-put') if command_params[0] == :put
+      return false
+    elsif command == :put && !valid_positive_int_string?(*command_params.slice(1..4))
+      return false
+    elsif command == :bury
+      return false unless command_params.length == 3 &&
+        valid_int_string?(command_params[1]) &&
+        valid_positive_int_string?(command_params[2])
+    elsif command == :release
+      return false unless command_params.length == 4 &&
+        valid_int_string?(command_params[1]) &&
+        valid_positive_int_string?(command_params[2]) &&
+        valid_positive_int_string?(command_params[3])
+    elsif command == :ignore && command_params.length != 2
+      return false
+    elsif command == :kick
+      return false if command_params[1].nil? || command_params[1].to_i == 0 &&
+        command_params[1] !~ ZERO_STRING_REGEX
+    elsif command == :'pause-tube'
+      return false if command_params[1].nil? || !valid_int_string?(command_params[2])
+    end
+    return true
+  end
+
+
+  def valid_int_string?(*ints)
+    return ints.all? {|int| int.to_i.to_s == int }
+  end
+
+
+  def valid_positive_int_string?(*ints)
+    return ints.all? do |int|
+      int_to_i = int.to_i
+      int_to_i.to_s == int && int_to_i >= 0
+    end
   end
 
 
