@@ -15,10 +15,11 @@ before_script:
   - BUNDLE_GEMFILE=/tmp/backburner/Gemfile bundle install
 
 script:
+  - rake test
   - cd /tmp/beaneater
-  - BUNDLE_GEMFILE=/tmp/beaneater/Gemfile bundle exec rake test:full
+  - CI='' BUNDLE_GEMFILE=/tmp/beaneater/Gemfile bundle exec rake test:full
   - cd /tmp/backburner
-  - BUNDLE_GEMFILE=/tmp/backburner/Gemfile bundle exec rake
+  - CI='' BUNDLE_GEMFILE=/tmp/backburner/Gemfile bundle exec rake
 
 matrix:
   allow_failures:
