@@ -13,17 +13,10 @@ class GemeraldBeanstalk::Jobs < ThreadSafe::Array
   end
 
 
-  def enqueue_existing(job)
+  def enqueue(job)
     @total_jobs += 1
     push(job)
-    return job
-  end
-
-
-  def enqueue_new(beanstalk, id, tube_used, priority, delay, ttr, bytes, body)
-    return enqueue_existing(
-      GemeraldBeanstalk::Job.new(beanstalk, id, tube_used, priority, delay, ttr, bytes, body)
-    )
+    return self
   end
 
 

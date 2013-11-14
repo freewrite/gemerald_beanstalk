@@ -373,7 +373,8 @@ class GemeraldBeanstalk::Beanstalk
     id = job = tube = nil
     @mutex.synchronize do
       id = @jobs.total_jobs + 1
-      job = @jobs.enqueue_new(self, id, connection.tube_used, priority.to_i, delay.to_i, ttr.to_i, bytes, body)
+      job = GemeraldBeanstalk::Job.new(self, id, connection.tube_used, priority, delay, ttr, bytes, body)
+      @jobs.enqueue(job)
       tube(connection.tube_used).put(job)
     end
     connection.producer = true

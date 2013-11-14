@@ -80,12 +80,13 @@ class GemeraldBeanstalk::Job
 
 
   def initialize(beanstalk, id, tube_name, priority, delay, ttr, bytes, body)
+    priority, delay, ttr = priority.to_i, delay.to_i, ttr.to_i
     @beanstalk = beanstalk
     @stats_hash = Hash.new(0)
     self.id = id
     self.tube_name = tube_name
     self.priority = priority % MAX_JOB_PRIORITY
-    self.delay = delay = delay
+    self.delay = delay
     self.ttr = ttr == 0 ? 1 : ttr
     self.bytes = bytes
     self.body = body
