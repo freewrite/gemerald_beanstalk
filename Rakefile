@@ -1,14 +1,20 @@
 require 'bundler/gem_tasks'
 require 'rake/testtask'
+require 'gemerald_beanstalk'
+
 
 Rake::TestTask.new do |t|
   t.libs << 'test'
   t.pattern = 'test/**/*_test.rb'
 end
 
-task :start_gemerald_beanstalk_test_server do
-  require 'gemerald_beanstalk'
+task :gemerald_beanstalk_test do
+  server_thread, beanstalk = GemeraldBeanstalk::Server.start(ENV['BIND_ADDRESS'], ENV['PORT'])
+  Rake::Task['test'].invoke
+  server_thread.kill
+end
 
+task :start_gemerald_beanstalk_test_server do
   Thread.abort_on_exception = true
   server_thread, beanstalk = GemeraldBeanstalk::Server.start(ENV['BIND_ADDRESS'], ENV['PORT'])
   trap("SIGINT") { server_thread.kill }
@@ -16,4 +22,4 @@ task :start_gemerald_beanstalk_test_server do
   server_thread.join
 end
 
-task :default => :test
+task :default => :gemerald_beanstalk_test
