@@ -9,6 +9,8 @@ Rake::TestTask.new do |t|
 end
 
 task :gemerald_beanstalk_test do
+  require 'coveralls'
+  Coveralls.wear!
   server_thread, beanstalk = GemeraldBeanstalk::Server.start(ENV['BIND_ADDRESS'], ENV['PORT'])
   Rake::Task['test'].invoke
   server_thread.kill
