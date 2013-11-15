@@ -11,16 +11,16 @@ before_script:
   - rake start_gemerald_beanstalk_test_server &
   - '[ "$TRAVIS_RUBY_VERSION" = "jruby-19mode" ] && (exit 0) || git clone https://github.com/beanstalkd/beaneater.git /tmp/beaneater'
   - '[ "$TRAVIS_RUBY_VERSION" = "jruby-19mode" ] && (exit 0) || BUNDLE_GEMFILE=/tmp/beaneater/Gemfile bundle install'
-  - git clone https://github.com/nesquena/backburner.git /tmp/backburner
-  - BUNDLE_GEMFILE=/tmp/backburner/Gemfile bundle install
+  - '[ "$TRAVIS_RUBY_VERSION" = "jruby-19mode" ] && (exit 0) || git clone https://github.com/nesquena/backburner.git /tmp/backburner'
+  - '[ "$TRAVIS_RUBY_VERSION" = "jruby-19mode" ] && (exit 0) || BUNDLE_GEMFILE=/tmp/backburner/Gemfile bundle install'
 
 script:
   - rake test
   - sudo sed -i 's/^\(127.0.0.1.*\)$/\1 coveralls.io/' /etc/hosts
   - '[ "$TRAVIS_RUBY_VERSION" = "jruby-19mode" ] && (exit 0) || cd /tmp/beaneater'
   - '[ "$TRAVIS_RUBY_VERSION" = "jruby-19mode" ] && (exit 0) || BUNDLE_GEMFILE=/tmp/beaneater/Gemfile bundle exec rake test:full'
-  - cd /tmp/backburner
-  - BUNDLE_GEMFILE=/tmp/backburner/Gemfile bundle exec rake
+  - '[ "$TRAVIS_RUBY_VERSION" = "jruby-19mode" ] && (exit 0) || cd /tmp/backburner'
+  - '[ "$TRAVIS_RUBY_VERSION" = "jruby-19mode" ] && (exit 0) || BUNDLE_GEMFILE=/tmp/backburner/Gemfile bundle exec rake'
 
 matrix:
   allow_failures:
