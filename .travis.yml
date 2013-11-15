@@ -16,7 +16,7 @@ before_script:
 
 script:
   - rake test
-  - sudo sed -e 's/^\(127.0.0.1.*\)$/\1 coveralls.io/' -i '' /etc/hosts
+  - sudo sed -i 's/^\(127.0.0.1.*\)$/\1 coveralls.io/' /etc/hosts
   - cd /tmp/beaneater
   - BUNDLE_GEMFILE=/tmp/beaneater/Gemfile bundle exec rake test:full
   - cd /tmp/backburner
