@@ -14,9 +14,9 @@ before_script:
   - '[ "$TRAVIS_RUBY_VERSION" = "jruby-19mode" ] && (exit 0) || BUNDLE_GEMFILE=/tmp/backburner/Gemfile bundle install'
 
 script:
-  - rake gemerald_beanstalk_test
+  - rake test
   - sudo sed -i 's/^\(127.0.0.1.*\)$/\1 coveralls.io/' /etc/hosts
-  - rake start_gemerald_beanstalk_test_server &
+  - '[ "$TRAVIS_RUBY_VERSION" = "jruby-19mode" ] && (exit 0) || rake start_gemerald_beanstalk_test_server &'
   - '[ "$TRAVIS_RUBY_VERSION" = "jruby-19mode" ] && (exit 0) || cd /tmp/beaneater'
   - '[ "$TRAVIS_RUBY_VERSION" = "jruby-19mode" ] && (exit 0) || BUNDLE_GEMFILE=/tmp/beaneater/Gemfile bundle exec rake test:full'
   - '[ "$TRAVIS_RUBY_VERSION" = "jruby-19mode" ] && (exit 0) || cd /tmp/backburner'
