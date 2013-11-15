@@ -1,9 +1,5 @@
 class GemeraldBeanstalk::Connection
 
-  INVALID_REQUEST = GemeraldBeanstalk::Beanstalk::INVALID_REQUEST
-  MULTI_PART_REQUEST = GemeraldBeanstalk::Beanstalk::MULTI_PART_REQUEST
-  VALID_REQUEST = GemeraldBeanstalk::Beanstalk::VALID_REQUEST
-
   BEGIN_REQUEST_STATES = [:ready, :multi_part_request_in_progress]
 
   attr_reader :beanstalk, :mutex, :tube_used, :tubes_watched
@@ -44,26 +40,25 @@ class GemeraldBeanstalk::Connection
 
 
   def execute(raw_command)
-    puts "#{Time.now.to_f}: #{raw_command}" if ENV['VERBOSE']
-    parsed_command = response = nil
+    command = response = nil
     @mutex.synchronize do
       return if waiting? || request_in_progress?
+      puts "#{Time.now.to_f}: #{raw_command}" if ENV['VERBOSE']
       if multi_part_request_in_progress?
-        parsed_command = @multi_part_request.push(raw_command)
+        (command = @multi_part_request).body = raw_command
       else
-        parsed_command = beanstalk.parse_command(raw_command)
-        case parsed_command.shift
-        when INVALID_REQUEST
-          response = parsed_command.shift
-        when MULTI_PART_REQUEST
-          return begin_multi_part_request(parsed_command)
+        command = GemeraldBeanstalk::Command.new(raw_command, self)
+        if !command.valid?
+          response = command.error
+        elsif command.multi_part_request?
+          return begin_multi_part_request(command)
         end
       end
       begin_request
     end
-    puts "#{Time.now.to_f}: #{parsed_command.inspect}" if ENV['VERBOSE']
+    puts "#{Time.now.to_f}: #{command.inspect}" if ENV['VERBOSE']
     # Execute command unless parsing already yielded a response
-    response ||= beanstalk.execute(self, *parsed_command)
+    response ||= beanstalk.execute(command)
     transmit(response) unless response.nil?
   end
 

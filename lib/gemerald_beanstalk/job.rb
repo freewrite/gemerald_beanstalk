@@ -46,7 +46,7 @@ class GemeraldBeanstalk::Job
 
     reset_reserve_state
     @state = :buried
-    @stats_hash['buries'] += 1
+    @stats_hash[:'buries'] += 1
     self.priority = priority.to_i
     self.buried_at = Time.now.to_f
     self.ready_at = nil
@@ -101,7 +101,7 @@ class GemeraldBeanstalk::Job
     return false unless INACTIVE_STATES.include?(state)
 
     @state = :ready
-    @stats_hash['kicks'] += 1
+    @stats_hash[:'kicks'] += 1
     self.ready_at = Time.now.to_f
     self.buried_at = nil
     return true
@@ -118,7 +118,7 @@ class GemeraldBeanstalk::Job
 
     reset_reserve_state
     @state = delay > 0 ? :delayed : :ready
-    @stats_hash['releases'] += 1 if increment_stats
+    @stats_hash[:'releases'] += 1 if increment_stats
     self.priority = priority.to_i
     self.delay = delay = delay.to_i
     self.ready_at = Time.now.to_f + delay
@@ -130,7 +130,7 @@ class GemeraldBeanstalk::Job
     return false unless ready?
 
     @state = :reserved
-    @stats_hash['reserves'] += 1
+    @stats_hash[:'reserves'] += 1
     @reserved_by = connection
     @reserved_at = Time.now.to_f
     @timeout_at = @reserved_at + self.ttr
@@ -187,11 +187,11 @@ class GemeraldBeanstalk::Job
       'ttr' => self.ttr,
       'time-left' => time_left || 0,
       'file' => 0,
-      'reserves' => @stats_hash['reserves'],
-      'timeouts' => @stats_hash['timeouts'],
-      'releases' => @stats_hash['releases'],
-      'buries' => @stats_hash['buries'],
-      'kicks' => @stats_hash['kicks'],
+      'reserves' => @stats_hash[:'reserves'],
+      'timeouts' => @stats_hash[:'timeouts'],
+      'releases' => @stats_hash[:'releases'],
+      'buries' => @stats_hash[:'buries'],
+      'kicks' => @stats_hash[:'kicks'],
     }
   end
 
@@ -200,7 +200,7 @@ class GemeraldBeanstalk::Job
   def timed_out(*args)
     return false unless RESERVED_STATES.include?(@state)
     @state = :ready
-    @stats_hash['timeouts'] += 1
+    @stats_hash[:'timeouts'] += 1
     connection = self.reserved_by
     reset_reserve_state
     self.beanstalk.register_job_timeout(connection, self)

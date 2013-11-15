@@ -31,7 +31,7 @@ class GemeraldBeanstalk::Tube
 
 
   def delete(job)
-    adjust_stats_key('cmd-delete')
+    adjust_stats_key(:'cmd-delete')
     return @jobs.delete(job)
   end
 
@@ -42,7 +42,7 @@ class GemeraldBeanstalk::Tube
 
 
   def ignore
-    adjust_stats_key('watching', -1)
+    adjust_stats_key(:'watching', -1)
     deactivate if should_deactivate?
   end
 
@@ -53,11 +53,11 @@ class GemeraldBeanstalk::Tube
     @reservations = []
     @state = :ready
     @stats = ThreadSafe::Cache.new
-    @stats['cmd-delete'] = 0
-    @stats['cmd-pause-tube'] = 0
-    @stats['using'] = 0
-    @stats['waiting'] = 0
-    @stats['watching'] = 0
+    @stats[:'cmd-delete'] = 0
+    @stats[:'cmd-pause-tube'] = 0
+    @stats[:'using'] = 0
+    @stats[:'waiting'] = 0
+    @stats[:'watching'] = 0
   end
 
 
@@ -90,7 +90,7 @@ class GemeraldBeanstalk::Tube
   def pause(delay, *args)
     return false unless ready?
     @state = :paused
-    adjust_stats_key('cmd-pause-tube')
+    adjust_stats_key(:'cmd-pause-tube')
     @pause_delay = delay.to_i
     @paused_at = Time.now.to_f
     @resume_at = @paused_at + @pause_delay
@@ -130,7 +130,7 @@ class GemeraldBeanstalk::Tube
 
 
   def should_deactivate?
-    return @jobs.length == 0 && @stats['watching'] == 0 && @stats['using'] == 0
+    return @jobs.length == 0 && @stats[:'watching'] == 0 && @stats[:'using'] == 0
   end
 
 
@@ -140,17 +140,17 @@ class GemeraldBeanstalk::Tube
     pause_time_left = paused? ? (@resume_at - Time.now.to_f).to_i : 0
     return {
       'name' => @name,
-      'current-jobs-urgent' => job_stats['current-jobs-urgent'],
-      'current-jobs-ready' => job_stats['current-jobs-ready'],
-      'current-jobs-reserved' => job_stats['current-jobs-reserved'],
-      'current-jobs-delayed' => job_stats['current-jobs-delayed'],
-      'current-jobs-buried' => job_stats['current-jobs-buried'],
+      'current-jobs-urgent' => job_stats[:'current-jobs-urgent'],
+      'current-jobs-ready' => job_stats[:'current-jobs-ready'],
+      'current-jobs-reserved' => job_stats[:'current-jobs-reserved'],
+      'current-jobs-delayed' => job_stats[:'current-jobs-delayed'],
+      'current-jobs-buried' => job_stats[:'current-jobs-buried'],
       'total-jobs' => @jobs.total_jobs,
-      'current-using' => @stats['using'],
-      'current-watching' => @stats['watching'],
+      'current-using' => @stats[:'using'],
+      'current-watching' => @stats[:'watching'],
       'current-waiting' => @reservations.length,
-      'cmd-delete' => @stats['cmd-delete'],
-      'cmd-pause-tube' => @stats['cmd-pause-tube'],
+      'cmd-delete' => @stats[:'cmd-delete'],
+      'cmd-pause-tube' => @stats[:'cmd-pause-tube'],
       'pause' => @pause_delay || 0,
       'pause-time-left' => pause_time_left,
     }
@@ -158,18 +158,18 @@ class GemeraldBeanstalk::Tube
 
 
   def stop_use
-    adjust_stats_key('using', -1)
+    adjust_stats_key(:'using', -1)
     deactivate if should_deactivate?
   end
 
 
   def watch
-    adjust_stats_key('watching')
+    adjust_stats_key(:'watching')
   end
 
 
   def use
-    adjust_stats_key('using')
+    adjust_stats_key(:'using')
   end
 
 end

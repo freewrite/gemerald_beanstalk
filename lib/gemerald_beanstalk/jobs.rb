@@ -6,8 +6,8 @@ class GemeraldBeanstalk::Jobs < ThreadSafe::Array
     self.compact.each do |job|
       state = job.state
 
-      job_stats["current-jobs-#{state}"] += 1
-      job_stats['current-jobs-urgent'] += 1 if state == :ready && job.priority < 1024
+      job_stats[:"current-jobs-#{state}"] += 1
+      job_stats[:'current-jobs-urgent'] += 1 if state == :ready && job.priority < 1024
     end
     return job_stats
   end
