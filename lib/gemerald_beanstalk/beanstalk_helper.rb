@@ -92,10 +92,11 @@ module GemeraldBeanstalk::BeanstalkHelper
 
 
   def find_job(job_id, options = {})
+    return unless (job_id = job_id.to_i) > 0
     only = Array(options[:only])
     except = Array(options[:except]).unshift(:deleted)
 
-    job = @jobs[job_id.to_i - 1]
+    job = @jobs[job_id - 1]
 
     return nil if job.nil? || except.include?(job.state)
     return (only.empty? || only.include?(job.state)) ? job : nil

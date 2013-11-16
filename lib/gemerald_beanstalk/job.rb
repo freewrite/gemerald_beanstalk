@@ -116,11 +116,12 @@ class GemeraldBeanstalk::Job
   def release(connection, priority, delay, increment_stats = true, *args)
     return false unless reserved_by_connection?(connection)
 
+    delay = delay.to_i
     reset_reserve_state
     @state = delay > 0 ? :delayed : :ready
     @stats_hash[:'releases'] += 1 if increment_stats
     self.priority = priority.to_i
-    self.delay = delay = delay.to_i
+    self.delay = delay
     self.ready_at = Time.now.to_f + delay
     return true
   end

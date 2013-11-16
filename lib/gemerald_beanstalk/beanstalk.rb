@@ -41,7 +41,6 @@ class GemeraldBeanstalk::Beanstalk
 
   def delete(connection, job_id = nil, *args)
     adjust_stats_key(:'cmd-delete')
-    job_id = job_id.to_i
     job = find_job(job_id)
     return NOT_FOUND if job.nil?
 
@@ -84,7 +83,6 @@ class GemeraldBeanstalk::Beanstalk
 
 
   def kick_job(connection, job_id = nil, *args)
-    job_id = job_id.to_i
     job = find_job(job_id, :only => JOB_INACTIVE_STATES)
     return (!job.nil? && job.kick) ? KICKED : NOT_FOUND
   end
@@ -119,7 +117,7 @@ class GemeraldBeanstalk::Beanstalk
 
   def peek(connection, job_id = nil, *args)
     adjust_stats_key(:'cmd-peek')
-    return peek_message(job_id.to_i > 0 ? find_job(job_id) : nil)
+    return peek_message(find_job(job_id))
   end
 
 
@@ -176,7 +174,7 @@ class GemeraldBeanstalk::Beanstalk
   def release(connection, job_id, priority, delay)
     adjust_stats_key(:'cmd-release')
     job = find_job(job_id, :only => JOB_RESERVED_STATES)
-    return NOT_FOUND if job.nil? || !job.release(connection, priority.to_i, delay.to_i)
+    return NOT_FOUND if job.nil? || !job.release(connection, priority, delay)
 
     @reserved[connection].delete(job)
     @delayed << job if job.delayed?
@@ -228,7 +226,6 @@ class GemeraldBeanstalk::Beanstalk
 
   def stats_job(connection, job_id = nil, *args)
     adjust_stats_key(:'cmd-stats-job')
-    job_id = job_id.to_i
     job = find_job(job_id)
     return NOT_FOUND if job.nil?
 
@@ -246,7 +243,6 @@ class GemeraldBeanstalk::Beanstalk
 
   def touch(connection, job_id = nil, *args)
     adjust_stats_key(:'cmd-touch')
-    job_id = job_id.to_i
     job = find_job(job_id, :only => JOB_RESERVED_STATES)
     return NOT_FOUND if job.nil? || !job.touch(connection)
 
