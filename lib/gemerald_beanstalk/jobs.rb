@@ -31,4 +31,9 @@ class GemeraldBeanstalk::Jobs < ThreadSafe::Array
     super
   end
 
+
+  def next_id
+    return @total_jobs + 1
+  end
+
 end

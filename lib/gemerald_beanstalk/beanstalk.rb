@@ -277,23 +277,25 @@ class GemeraldBeanstalk::Beanstalk
     adjust_stats_key(:'cmd-put')
     bytes = bytes.to_i
     return JOB_TOO_BIG if bytes > @max_job_size
-    return EXPECTED_CRLF if body.length - 2 != bytes || body.slice!(-2, 2) != CRLF
+    return EXPECTED_CRLF if body.slice!(-2, 2) != CRLF || body.length != bytes
 
-    id = job = tube = nil
+    job = nil
+    # Ensure job insertion order and ID
     @mutex.synchronize do
-      id = @jobs.total_jobs + 1
-      job = GemeraldBeanstalk::Job.new(self, id, connection.tube_used, priority, delay, ttr, bytes, body)
+      job = GemeraldBeanstalk::Job.new(self, @jobs.next_id, connection.tube_used, priority, delay, ttr, bytes, body)
       @jobs.enqueue(job)
       tube(connection.tube_used).put(job)
     end
-    connection.producer = true
 
     # Send async so client doesn't wait while we check if job can be immediately dispatched
-    connection.transmit("INSERTED #{id}\r\n")
+    connection.transmit("INSERTED #{job.id}\r\n")
 
-    if job.ready?
-      honor_reservations(job, tube)
-    elsif job.delayed?
+    connection.producer = true
+
+    case job.state
+    when :ready
+      honor_reservations(job)
+    when :delayed
       @delayed << job
     end
     return nil
