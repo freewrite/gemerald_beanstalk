@@ -153,10 +153,10 @@ class GemeraldBeanstalk::Beanstalk
   end
 
 
-  def honor_reservations(job_or_tube, tube = nil)
+  def honor_reservations(job_or_tube)
     if job_or_tube.is_a?(GemeraldBeanstalk::Job)
       job = job_or_tube
-      tube ||= tube(job.tube_name)
+      tube = tube(job.tube_name)
     elsif job_or_tube.is_a?(GemeraldBeanstalk::Tube)
       tube = job_or_tube
       job = tube.next_job
@@ -245,16 +245,13 @@ class GemeraldBeanstalk::Beanstalk
 
   def peek(connection, job_id = nil, *args)
     adjust_stats_key(:'cmd-peek')
-    job_id = job_id.to_i
-    job = find_job(job_id) if job_id > 0
-    return job.nil? ? NOT_FOUND : "FOUND #{job.id} #{job.bytes}\r\n#{job.body}\r\n"
+    return peek_message(job_id.to_i > 0 ? find_job(job_id) : nil)
   end
 
 
   def peek_by_state(connection, state)
     adjust_stats_key(:"cmd-peek-#{state}")
-    job = tube(connection.tube_used).next_job(state, :peek)
-    return job.nil? ? NOT_FOUND : "FOUND #{job.id} #{job.bytes}\r\n#{job.body}\r\n"
+    return peek_message(tube(connection.tube_used).next_job(state, :peek))
   end
 
 
@@ -265,6 +262,11 @@ class GemeraldBeanstalk::Beanstalk
 
   def peek_delayed(connection)
     return peek_by_state(connection, :delayed)
+  end
+
+
+  def peek_message(job)
+    job.nil? ? NOT_FOUND : "FOUND #{job.id} #{job.bytes}\r\n#{job.body}\r\n"
   end
 
 
@@ -487,18 +489,12 @@ class GemeraldBeanstalk::Beanstalk
 
 
   def update_state
-    waiting_connections.each do |connection|
-      if connection.waiting? && deadline_pending?(connection)
-        message_for_connection = DEADLINE_SOON
-      elsif connection.timed_out?
-        message_for_connection = TIMED_OUT
-      else
-        next
-      end
+    update_waiting
+    update_timeouts
+  end
 
-      cancel_reservations(connection)
-      connection.transmit(message_for_connection)
-    end
+
+  def update_timeouts
     @reserved.values.flatten.each(&:state)
     @delayed.keep_if do |job|
       case job.state
@@ -518,6 +514,22 @@ class GemeraldBeanstalk::Beanstalk
         honor_reservations(tube)
         false
       end
+    end
+  end
+
+
+  def update_waiting
+    waiting_connections.each do |connection|
+      if connection.waiting? && deadline_pending?(connection)
+        message_for_connection = DEADLINE_SOON
+      elsif connection.timed_out?
+        message_for_connection = TIMED_OUT
+      else
+        next
+      end
+
+      cancel_reservations(connection)
+      connection.transmit(message_for_connection)
     end
   end
 
