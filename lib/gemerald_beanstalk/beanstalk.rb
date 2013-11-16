@@ -120,22 +120,6 @@ class GemeraldBeanstalk::Beanstalk
   end
 
 
-  def connection_stats
-    conn_stats = {
-      :'current-producers' => 0,
-      :'current-waiting' => 0,
-      :'current-workers' => 0,
-    }
-    @connections.each do |connection|
-      conn_stats[:'current-producers'] += 1 if connection.producer?
-      conn_stats[:'current-waiting'] += 1 if connection.waiting?
-      conn_stats[:'current-workers'] += 1 if connection.worker?
-    end
-    conn_stats[:'current-connections'] = @connections.length
-    return conn_stats
-  end
-
-
   def deadline_pending?(connection)
     return @reserved[connection].any?(&:deadline_pending?)
   end
@@ -375,14 +359,31 @@ class GemeraldBeanstalk::Beanstalk
 
   def stats(connection)
     adjust_stats_key(:'cmd-stats')
-    job_stats = @jobs.counts_by_state
-    conn_stats = connection_stats
-    stats = {
-      'current-jobs-urgent' => job_stats[:'current-jobs-urgent'],
-      'current-jobs-ready' => job_stats[:'current-jobs-ready'],
-      'current-jobs-reserved' => job_stats[:'current-jobs-reserved'],
-      'current-jobs-delayed' => job_stats[:'current-jobs-delayed'],
-      'current-jobs-buried' => job_stats[:'current-jobs-buried'],
+    stats = @jobs.counts_by_state.merge(stats_commands).merge({
+      'job-timeouts' => @stats[:'job-timeouts'],
+      'total-jobs' => @jobs.total_jobs,
+      'max-job-size' => @max_job_size,
+      'current-tubes' => active_tubes.length,
+    }).merge(stats_connections).merge({
+      'pid' => Process.pid,
+      'version' => GemeraldBeanstalk::VERSION,
+      'rusage-utime' => 0,
+      'rusage-stime' => 0,
+      'uptime' => uptime,
+      'binlog-oldest-index' => 0,
+      'binlog-current-index' => 0,
+      'binlog-records-migrated' => 0,
+      'binlog-records-written' => 0,
+      'binlog-max-size' => 10485760,
+      'id' => @id,
+      'hostname' => Socket.gethostname,
+    })
+    return yaml_response(stats.map{|stat, value| "#{stat}: #{value}" })
+  end
+
+
+  def stats_commands
+    return {
       'cmd-put' => @stats[:'cmd-put'],
       'cmd-peek' => @stats[:'cmd-peek'],
       'cmd-peek-ready' => @stats[:'cmd-peek-ready'],
@@ -405,29 +406,24 @@ class GemeraldBeanstalk::Beanstalk
       'cmd-list-tube-used' => @stats[:'cmd-list-tube-used'],
       'cmd-list-tubes-watched' => @stats[:'cmd-list-tubes-watched'],
       'cmd-pause-tube' => @stats[:'cmd-pause-tube'],
-      'job-timeouts' => @stats[:'job-timeouts'],
-      'total-jobs' => @jobs.total_jobs,
-      'max-job-size' => @max_job_size,
-      'current-tubes' => active_tubes.length,
-      'current-connections' => conn_stats[:'current-connections'],
-      'current-producers' => conn_stats[:'current-producers'],
-      'current-workers' => conn_stats[:'current-workers'],
-      'current-waiting' => conn_stats[:'current-waiting'],
-      'total-connections' => @stats[:'total-connections'],
-      'pid' => Process.pid,
-      'version' => GemeraldBeanstalk::VERSION,
-      'rusage-utime' => 0,
-      'rusage-stime' => 0,
-      'uptime' => (Time.now.to_f - @up_at).to_i,
-      'binlog-oldest-index' => 0,
-      'binlog-current-index' => 0,
-      'binlog-records-migrated' => 0,
-      'binlog-records-written' => 0,
-      'binlog-max-size' => 10485760,
-      'id' => @id,
-      'hostname' => Socket.gethostname,
     }
-    return yaml_response(stats.map{|stat, value| "#{stat}: #{value}" })
+  end
+
+
+  def stats_connections
+    conn_stats = {
+      'current-connections' => @connections.length,
+      'current-producers' => 0,
+      'current-workers' => 0,
+      'current-waiting' => 0,
+      'total-connections' => @stats[:'total-connections']
+    }
+    @connections.each do |connection|
+      conn_stats['current-producers'] += 1 if connection.producer?
+      conn_stats['current-waiting'] += 1 if connection.waiting?
+      conn_stats['current-workers'] += 1 if connection.worker?
+    end
+    return conn_stats
   end
 
 
@@ -521,6 +517,11 @@ class GemeraldBeanstalk::Beanstalk
         false
       end
     end
+  end
+
+
+  def uptime
+    (Time.now.to_f - @up_at).to_i
   end
 
 

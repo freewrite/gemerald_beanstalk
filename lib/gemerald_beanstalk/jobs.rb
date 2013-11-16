@@ -2,12 +2,18 @@ class GemeraldBeanstalk::Jobs < ThreadSafe::Array
   attr_reader :total_jobs
 
   def counts_by_state
-    job_stats = Hash.new(0)
+    job_stats = {
+      'current-jobs-urgent' => 0,
+      'current-jobs-ready' => 0,
+      'current-jobs-reserved' => 0,
+      'current-jobs-delayed' => 0,
+      'current-jobs-buried' => 0,
+    }
     self.compact.each do |job|
       state = job.state
 
-      job_stats[:"current-jobs-#{state}"] += 1
-      job_stats[:'current-jobs-urgent'] += 1 if state == :ready && job.priority < 1024
+      job_stats["current-jobs-#{state}"] += 1
+      job_stats['current-jobs-urgent'] += 1 if state == :ready && job.priority < 1024
     end
     return job_stats
   end

@@ -140,11 +140,11 @@ class GemeraldBeanstalk::Tube
     pause_time_left = paused? ? (@resume_at - Time.now.to_f).to_i : 0
     return {
       'name' => @name,
-      'current-jobs-urgent' => job_stats[:'current-jobs-urgent'],
-      'current-jobs-ready' => job_stats[:'current-jobs-ready'],
-      'current-jobs-reserved' => job_stats[:'current-jobs-reserved'],
-      'current-jobs-delayed' => job_stats[:'current-jobs-delayed'],
-      'current-jobs-buried' => job_stats[:'current-jobs-buried'],
+      'current-jobs-urgent' => job_stats['current-jobs-urgent'],
+      'current-jobs-ready' => job_stats['current-jobs-ready'],
+      'current-jobs-reserved' => job_stats['current-jobs-reserved'],
+      'current-jobs-delayed' => job_stats['current-jobs-delayed'],
+      'current-jobs-buried' => job_stats['current-jobs-buried'],
       'total-jobs' => @jobs.total_jobs,
       'current-using' => @stats[:'using'],
       'current-watching' => @stats[:'watching'],
