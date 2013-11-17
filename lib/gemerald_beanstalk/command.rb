@@ -1,6 +1,6 @@
 class GemeraldBeanstalk::Command
 
-  COMMAND_PARSER_REGEX = /(?<command>.*?)(?:\r\n(?<body>.*))?\r\n\z/m
+  COMMAND_PARSER_REGEX = /(?:(?<command>.*?)\r\n)(?<body>.*\r\n)?\z/m
   TRAILING_SPACE_REGEX = /\s+\z/
   WHITE_SPACE_REGEX = / /
   ZERO_STRING_REGEX = /^0+[^1-9]*/
@@ -31,7 +31,7 @@ class GemeraldBeanstalk::Command
   COMMANDS_REQUIRING_SPACE_AFTER_COMMAND = COMMANDS - COMMANDS_RECOGNIZED_WITHOUT_SPACE_AFTER_COMMAND
 
   attr_reader :command, :connection, :error
-  attr_writer :body
+  attr_accessor :body
 
 
   def arguments
@@ -40,11 +40,6 @@ class GemeraldBeanstalk::Command
     else
       return @args[0, @argument_cardnality].unshift(connection)
     end
-  end
-
-
-  def body
-    return "#{@body}\r\n"
   end
 
 
