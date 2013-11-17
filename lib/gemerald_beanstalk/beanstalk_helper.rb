@@ -1,10 +1,5 @@
 module GemeraldBeanstalk::BeanstalkHelper
 
-  COMMAND_PARSER_REGEX = /(?<command>.*?)(?:\r\n(?<body>.*))?\r\n\z/m
-  TRAILING_SPACE_REGEX = /\s+\z/
-  WHITE_SPACE_REGEX = / /
-  ZERO_STRING_REGEX = /^0+[^1-9]*/
-
   BAD_FORMAT = "BAD_FORMAT\r\n"
   BURIED = "BURIED\r\n"
   CRLF = "\r\n"
@@ -39,8 +34,9 @@ module GemeraldBeanstalk::BeanstalkHelper
 
 
   def disconnect(connection)
+    connection.close_connection
     tube(connection.tube_used).stop_use
-    connection.tubes_watched.dup.each do |watched_tube|
+    connection.tubes_watched.each do |watched_tube|
       tube(watched_tube).ignore
       connection.ignore(watched_tube, :force)
     end
@@ -49,7 +45,6 @@ module GemeraldBeanstalk::BeanstalkHelper
     end
     @reserved.delete(connection)
     @connections.delete(connection)
-    connection.close_connection
   end
 
 

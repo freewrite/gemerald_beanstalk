@@ -36,11 +36,6 @@ class GemeraldBeanstalk::Tube
   end
 
 
-  def each(&block)
-    return block_given? ? @jobs.each(&block) : @jobs.each
-  end
-
-
   def ignore
     adjust_stats_key(:'watching', -1)
     deactivate if should_deactivate?
@@ -101,6 +96,7 @@ class GemeraldBeanstalk::Tube
   def paused?
     return false unless @state == :paused
     return true if @resume_at > Time.now.to_f
+
     @state = :ready
     @pause_delay = @paused_at = @resume_at = nil
     return false
@@ -119,13 +115,6 @@ class GemeraldBeanstalk::Tube
 
   def reserve(connection)
     @reservations << connection
-  end
-
-
-  def resume
-    return false unless paused?
-    @state = :ready
-    return true
   end
 
 

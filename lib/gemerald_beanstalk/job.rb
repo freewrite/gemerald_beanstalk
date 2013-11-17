@@ -174,9 +174,9 @@ class GemeraldBeanstalk::Job
     now = Time.now.to_f
     current_state = state
     if self.timeout_at
-      time_left = (self.timeout_at - now).to_i
+      time_left = self.timeout_at - now
     elsif self.ready_at
-      time_left = (self.ready_at - now).to_i
+      time_left = self.ready_at - now
     end
     return {
       'id' => self.id,
@@ -184,9 +184,9 @@ class GemeraldBeanstalk::Job
       'state' => current_state == :deadline_pending ? 'reserved' : current_state.to_s,
       'pri' => self.priority,
       'age' => (now - self.created_at).to_i,
-      'delay' => self.delay || 0,
+      'delay' => self.delay.to_i,
       'ttr' => self.ttr,
-      'time-left' => time_left || 0,
+      'time-left' => time_left.to_i,
       'file' => 0,
       'reserves' => @stats_hash[:'reserves'],
       'timeouts' => @stats_hash[:'timeouts'],
