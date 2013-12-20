@@ -10,7 +10,7 @@ Gem::Specification.new do |spec|
   spec.email         = ['dev@freewrite.org']
   spec.description   = %q{RubyGem implementation of beanstalkd}
   spec.summary       = %q{Gemerald Beanstalk offers a Ruby implementation of beanstalkd for testing and other uses.}
-  spec.homepage      = ''
+  spec.homepage      = 'https://github.com/gemeraldbeanstalk/gemerald_beanstalk'
   spec.license       = 'MIT'
 
   spec.files         = `git ls-files`.split($/)
