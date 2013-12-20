@@ -1,4 +1,5 @@
 # GemeraldBeanstalk
+[![Gem Version](https://badge.fury.io/rb/gemerald_beanstalk.png)](http://badge.fury.io/rb/gemerald_beanstalk)
 [![Build Status](https://travis-ci.org/gemeraldbeanstalk/gemerald_beanstalk.png?branch=master)](https://travis-ci.org/gemeraldbeanstalk/gemerald_beanstalk)
 [![Coverage Status](https://coveralls.io/repos/gemeraldbeanstalk/gemerald_beanstalk/badge.png)](https://coveralls.io/r/gemeraldbeanstalk/gemerald_beanstalk)
 [![Code Climate](https://codeclimate.com/github/gemeraldbeanstalk/gemerald_beanstalk.png)](https://codeclimate.com/github/gemeraldbeanstalk/gemerald_beanstalk)
