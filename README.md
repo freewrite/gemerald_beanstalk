@@ -10,7 +10,7 @@ GemeraldBeanstalk offers a Ruby implementation of beanstalkd for testing and oth
 ## Usage
 
 GemeraldBeanstalk should work as a drop in replacement for beanstalkd. You can
-start a server via the GemeraldBeanstalk::Server.start:
+start a server via GemeraldBeanstalk::Server.start:
 ```ruby
 
   # Start a GemeraldBeanstalk bound to 0.0.0.0:11300
@@ -54,9 +54,9 @@ such, GemeraldBeanstalk doesn't suffer from them. This can be troubling when
 you run tests that work against GemeraldBeanstalk, but then fail against an
 actual beanstalkd server. Below are a list of those protocol issues that exist
 with Beanstalk, but not with GemeraldBeanstalk.
-[Pause tube should check tube name valid](https://github.com/kr/beanstalkd/pull/217)
-[Can't ignore tube with name 200 chars long](https://github.com/kr/beanstalkd/issues/212)
-[Use of 200-char tube name causes INTERNAL_ERROR](https://github.com/kr/beanstalkd/issues/211)
+ * [Pause tube should check tube name valid](https://github.com/kr/beanstalkd/pull/217)
+ * [Can't ignore tube with name 200 chars long](https://github.com/kr/beanstalkd/issues/212)
+ * [Use of 200-char tube name causes INTERNAL_ERROR](https://github.com/kr/beanstalkd/issues/211)
 
 ## Contributing
 
