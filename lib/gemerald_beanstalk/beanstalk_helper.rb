@@ -19,6 +19,21 @@ module GemeraldBeanstalk::BeanstalkHelper
   JOB_INACTIVE_STATES = GemeraldBeanstalk::Job::INACTIVE_STATES
   JOB_RESERVED_STATES = GemeraldBeanstalk::Job::RESERVED_STATES
 
+
+  def self.included(beanstalk)
+    beanstalk.extend(ClassMethods)
+  end
+
+
+  module ClassMethods
+
+    def load_plugin(plugin_name)
+      include(GemeraldBeanstalk::Plugin.const_get(plugin_name))
+    end
+
+  end
+
+
   # ease handling of odd case where put can return BAD_FORMAT but increment stats
   def adjust_stats_cmd_put
     adjust_stats_key(:'cmd-put')
@@ -295,6 +310,5 @@ module GemeraldBeanstalk::BeanstalkHelper
     response = %w[---].concat(data).join("\n")
     return "OK #{response.bytesize}\r\n#{response}\r\n"
   end
-
 
 end
