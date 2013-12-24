@@ -24,6 +24,14 @@ class GemeraldBeanstalk::Server
   @@servers = ThreadSafe::Cache.new
 
 
+  # Returns the thread that the EventMachine event reactor is running in.
+  #
+  # @return [Thread] the thread the event reactor is running in.
+  def self.event_reactor_thread
+    return @@event_reactor_thread
+  end
+
+
   # Create a new GemeraldBeanstalk::Server at the given `bind_address` and
   # `port`. `start_on_init` controls whether the server is immediately started
   # or starting the server should be deferred.
@@ -67,7 +75,7 @@ class GemeraldBeanstalk::Server
   def start
     raise RuntimeError, "Server already exists for address #{full_address}" if @@servers.put_if_absent(full_address, self)
     @beanstalk = GemeraldBeanstalk::Beanstalk.new(full_address)
-    start_event_loop
+    start_event_reactor
     EventMachine.run do
       @event_server = EventMachine.start_server(bind_address, port, GemeraldBeanstalk::EventServer, beanstalk)
       EventMachine.add_periodic_timer(0.01, beanstalk.method(:update_state))
@@ -99,10 +107,10 @@ class GemeraldBeanstalk::Server
 
 
   # Starts the EventMachine reactor in a new thread.
-  def start_event_loop
+  def start_event_reactor
     return true if EventMachine.reactor_running?
     unless EventMachine.reactor_running?
-      Thread.new { EventMachine.run }
+      @@event_reactor_thread = Thread.new { EventMachine.run }
       while !EventMachine.reactor_running?
         sleep 0.1
       end

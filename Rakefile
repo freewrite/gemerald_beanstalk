@@ -10,10 +10,11 @@ end
 
 task :start_gemerald_beanstalk_test_server do
   Thread.abort_on_exception = true
-  server_thread, beanstalk = GemeraldBeanstalk::Server.start(ENV['BIND_ADDRESS'], ENV['PORT'])
-  trap("SIGINT") { server_thread.kill }
-  puts "GemeraldBeanstalk listening on #{beanstalk.address}"
-  server_thread.join
+  server = GemeraldBeanstalk::Server.new(ENV['BIND_ADDRESS'], ENV['PORT'])
+  event_reactor = GemeraldBeanstalk::Server.event_reactor_thread
+  trap("SIGINT") { event_reactor.kill }
+  puts "GemeraldBeanstalk listening on #{server.full_address}"
+  event_reactor.join
 end
 
 task :default => :test
