@@ -128,7 +128,7 @@ class ServerTest < GemeraldBeanstalkTest
   end
 
 
-  context '#start_event_loop' do
+  context '#start_event_reactor' do
 
     setup do
       @server = GemeraldBeanstalk::Server.new(nil, nil, false)
@@ -136,15 +136,15 @@ class ServerTest < GemeraldBeanstalkTest
 
 
     should 'start the EventMachine reactor' do
-      @server.send(:start_event_loop)
+      @server.send(:start_event_reactor)
       assert EventMachine.reactor_running?
     end
 
 
     should 'not try to start EventMachine reactor if already running' do
-      @server.send(:start_event_loop)
+      @server.send(:start_event_reactor)
       Thread.expects(:new).never
-      @server.send(:start_event_loop)
+      @server.send(:start_event_reactor)
     end
 
   end
