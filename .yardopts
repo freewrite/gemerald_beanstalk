@@ -1,0 +1,7 @@
+--output-dir doc/
+--readme README.md
+--title GemeraldBeanstalk
+--markup=markdown
+--protected
+--private
+lib/gemerald_beanstalk/**/*.rb
