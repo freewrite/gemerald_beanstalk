@@ -1,6 +1,6 @@
 class GemeraldBeanstalk::Tube
 
-  attr_reader :jobs, :name, :reservartions
+  attr_reader :jobs, :name, :reservations
 
 
   def active?
