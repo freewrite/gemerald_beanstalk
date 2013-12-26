@@ -40,8 +40,9 @@ class IntrospectionTest < GemeraldBeanstalkTest
 
     context '#tubes' do
 
-      should 'return the beanstalk instance tubes object' do
-        assert_equal @beanstalk.instance_variable_get(:@tubes), @beanstalk.tubes
+      should 'return the beanstalk instance active_tubes' do
+        @beanstalk.expects(:active_tubes).once.returns({})
+        @beanstalk.tubes
       end
 
     end

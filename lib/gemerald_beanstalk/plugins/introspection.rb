@@ -11,7 +11,7 @@ module GemeraldBeanstalk::Plugin::Introspection
 
 
   def tubes
-    return @tubes
+    return active_tubes
   end
 
 end
