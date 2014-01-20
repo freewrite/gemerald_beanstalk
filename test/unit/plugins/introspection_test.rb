@@ -6,7 +6,7 @@ class IntrospectionTest < GemeraldBeanstalkTest
 
     should 'automatically load plugin' do
       GemeraldBeanstalk::Beanstalk.expects(:load_plugin).with(:Introspection)
-      require 'gemerald_beanstalk/plugins/introspection'
+      load 'gemerald_beanstalk/plugins/introspection.rb'
     end
 
   end
