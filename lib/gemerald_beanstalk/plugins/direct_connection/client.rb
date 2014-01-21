@@ -18,6 +18,7 @@ module GemeraldBeanstalk::Plugin::DirectConnection
 
 
     def transmit(message)
+      message += "\r\n" unless message[-2, 2] == "\r\n"
       connection.execute(message)
       while (async_response = @async_response).nil?
         sleep 0.1
