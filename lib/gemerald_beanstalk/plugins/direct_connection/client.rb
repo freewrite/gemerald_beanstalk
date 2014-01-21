@@ -1,10 +1,12 @@
 module GemeraldBeanstalk::Plugin::DirectConnection
   class Client
 
+    attr_reader :beanstalk, :connection
+
     def close_connection
-      return unless @connection.alive?
-      @connection.close_connection
-      @beanstalk.disconnect(self)
+      return unless connection.alive?
+      connection.close_connection
+      beanstalk.disconnect(self)
     end
 
 
@@ -16,7 +18,7 @@ module GemeraldBeanstalk::Plugin::DirectConnection
 
 
     def transmit(message)
-      @connection.execute(message)
+      connection.execute(message)
       while (async_response = @async_response).nil?
         sleep 0.1
       end
