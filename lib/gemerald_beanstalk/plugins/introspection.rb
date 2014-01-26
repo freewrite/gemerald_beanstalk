@@ -6,7 +6,7 @@ module GemeraldBeanstalk::Plugin::Introspection
 
 
   def jobs
-    return @jobs
+    return @jobs.compact
   end
 
 

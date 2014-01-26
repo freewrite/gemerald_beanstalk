@@ -31,8 +31,8 @@ class IntrospectionTest < GemeraldBeanstalkTest
 
     context '#jobs' do
 
-      should 'return the beanstalk instance jobs object' do
-        assert_equal @beanstalk.instance_variable_get(:@jobs), @beanstalk.jobs
+      should 'return the compacted beanstalk instance jobs object' do
+        assert_equal @beanstalk.instance_variable_get(:@jobs).compact, @beanstalk.jobs
       end
 
     end
