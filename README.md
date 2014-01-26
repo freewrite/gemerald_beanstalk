@@ -28,7 +28,9 @@ The internals of GemeraldBeanstalk are undocumented at this point, with the
 expectation being that it should be interacted with strictly via the [beanstalkd
 protocol](https://github.com/kr/beanstalkd/blob/master/doc/protocol.md). This
 will likely change in the future, allowing more programatic access directly to
-the GemeraldBeanstalk::Beanstalk.
+the GemeraldBeanstalk::Beanstalk. If you think better documentation is needed
+pronto, create an issue and I will add docs.
+
 
 ## Installation
 
